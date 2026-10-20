@@ -17,6 +17,56 @@ async function saveState(folder, state) {
   await writeFile(path.join(hidden, "session.json"), `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
+async function loadState(folder) {
+  const target = path.join(folder, ".shot-analysis", "session.json");
+  try {
+    return JSON.parse(await readFile(target, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") throw new Error(`ไม่พบ session สำหรับ resume ที่ ${target}`);
+    throw new Error(`อ่าน session ไม่สำเร็จ: ${error.message}`);
+  }
+}
+
+async function checkpoint(folder, state, status) {
+  state.version = 2;
+  state.status = status;
+  state.updatedAt = new Date().toISOString();
+  delete state.lastError;
+  await saveState(folder, state);
+}
+
+async function saveFailure(folder, state, error) {
+  state.lastError = {
+    stage: state.status,
+    message: error.message,
+    at: new Date().toISOString()
+  };
+  state.updatedAt = state.lastError.at;
+  await saveState(folder, state);
+}
+
+async function trackFailure(folder, state, operation) {
+  try {
+    return await operation();
+  } catch (error) {
+    await saveFailure(folder, state, error);
+    throw error;
+  }
+}
+
+function normalizeExistingReferences(analysis, references = "") {
+  const raw = analysis?.references?.length
+    ? analysis.references
+    : references.split(",").map((item) => item.trim()).filter(Boolean).map((label) => ({ label, description: "ภาพอ้างอิงที่ผู้ใช้ระบุ" }));
+  return raw.map((item, index) => {
+    const candidate = String(item.pictureId || item.label || "").trim().replace(/^<|>$/g, "");
+    return {
+      pictureId: /^Picture \d+$/i.test(candidate) ? candidate : `Picture ${index + 1}`,
+      description: item.description || candidate || "ภาพอ้างอิงที่ผู้ใช้ระบุ"
+    };
+  });
+}
+
 async function generateJson(llm, prompt, validator, label) {
   let response = await llm.generate({ system: SYSTEM_PROMPT, prompt, json: true });
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -86,19 +136,22 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
 
   const input = { projectName, brief, durationSeconds, targetPlatform, aspectRatio, references };
   const answers = {};
-  const state = { version: 1, status: "analyzing", provider: settings.provider, model: settings.model, input, answers, outputFolder };
+  const state = { version: 2, status: "analyzing", provider: settings.provider, model: settings.model, input, answers, outputFolder };
   await saveText(path.join(outputFolder, "00-brief.md"), `# Brief: ${projectName}\n\n${brief}\n\n- Duration: ${durationSeconds}s\n- Platform: ${targetPlatform}\n- Aspect ratio: ${aspectRatio}\n- References: ${references || "ไม่มี"}\n`);
   await saveState(outputFolder, state);
 
   console.log("\nกำลังวิเคราะห์ brief...");
-  let analysis = await generateJson(llm, analysisPrompt({ ...input, answers }), validateAnalysis, "analysis");
+  let analysis = await trackFailure(outputFolder, state, () => generateJson(llm, analysisPrompt({ ...input, answers }), validateAnalysis, "analysis"));
   for (let round = 0; round < 3 && analysis.clarificationQuestions.some((item) => item.required); round += 1) {
     console.log("\nต้องการข้อมูลเพิ่มเติมก่อนวางโครงเรื่อง");
     for (const question of analysis.clarificationQuestions) {
       const answer = await terminal.ask(`${question.question}\n  เหตุผล: ${question.why}`);
       if (answer) answers[question.id] = answer;
     }
-    analysis = await generateJson(llm, analysisPrompt({ ...input, answers, previousAnalysis: analysis }), validateAnalysis, "analysis");
+    state.answers = answers;
+    state.analysis = analysis;
+    await checkpoint(outputFolder, state, "analyzing");
+    analysis = await trackFailure(outputFolder, state, () => generateJson(llm, analysisPrompt({ ...input, answers, previousAnalysis: analysis }), validateAnalysis, "analysis"));
   }
   if (analysis.clarificationQuestions.some((item) => item.required)) {
     console.log("\nLLM ยังระบุว่ามีข้อมูลสำคัญไม่ครบหลังการถามเพิ่มเติม");
@@ -129,88 +182,261 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
   await saveText(analysisFile, renderAnalysis(analysis));
   state.analysis = analysis;
   state.answers = answers;
-  state.status = "story-review";
-  await saveState(outputFolder, state);
+  await checkpoint(outputFolder, state, "story-generation");
 
   console.log("กำลังสร้างโครงเรื่อง...");
-  let story = await generateJson(llm, storyPrompt(analysis, answers), validateStory, "story");
+  let story = await trackFailure(outputFolder, state, () => generateJson(llm, storyPrompt(analysis, answers), validateStory, "story"));
   const storyFile = path.join(outputFolder, "02-story.md");
   await saveText(storyFile, renderStory(story));
+  state.story = story;
+  await checkpoint(outputFolder, state, "story-review");
   const storyApproved = await reviewDocument(terminal, "โครงเรื่อง", storyFile, async (notes) => {
-    story = await generateJson(llm, storyPrompt(analysis, answers, notes), validateStory, "story");
+    story = await trackFailure(outputFolder, state, () => generateJson(llm, storyPrompt(analysis, answers, notes), validateStory, "story"));
     await saveText(storyFile, renderStory(story));
+    state.story = story;
+    await checkpoint(outputFolder, state, "story-review");
   });
   state.story = story;
-  state.status = storyApproved ? "shots-review" : "story-review";
-  await saveState(outputFolder, state);
+  await checkpoint(outputFolder, state, storyApproved ? "shots-generation" : "story-review");
   if (!storyApproved) return { outputFolder, status: state.status };
 
   console.log("กำลังแตกโครงเรื่องเป็น shot list...");
-  let shots = await generateJson(llm, shotsPrompt(story), validateShots, "shot list");
+  let shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story), validateShots, "shot list"));
   const shotsFile = path.join(outputFolder, "03-shots.md");
   await saveText(shotsFile, renderShots(shots));
+  state.shots = shots;
+  await checkpoint(outputFolder, state, "shots-review");
   const shotsApproved = await reviewDocument(terminal, "shot list", shotsFile, async (notes) => {
-    shots = await generateJson(llm, shotsPrompt(story, notes), validateShots, "shot list");
+    shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story, notes), validateShots, "shot list"));
     await saveText(shotsFile, renderShots(shots));
+    state.shots = shots;
+    await checkpoint(outputFolder, state, "shots-review");
   });
   state.shots = shots;
-  state.status = shotsApproved ? "reference-prompts-generation" : "shots-review";
-  await saveState(outputFolder, state);
+  await checkpoint(outputFolder, state, shotsApproved ? "reference-prompts-generation" : "shots-review");
   if (!shotsApproved) return { outputFolder, status: state.status };
 
   console.log("กำลังสร้าง prompt สำหรับภาพอ้างอิง...");
-  const rawExistingReferences = analysis.references?.length
-    ? analysis.references
-    : references.split(",").map((item) => item.trim()).filter(Boolean).map((label) => ({ label, description: "ภาพอ้างอิงที่ผู้ใช้ระบุ" }));
-  const existingReferences = rawExistingReferences.map((item, index) => {
-    const candidate = String(item.pictureId || item.label || "").trim().replace(/^<|>$/g, "");
-    return {
-      pictureId: /^Picture \d+$/i.test(candidate) ? candidate : `Picture ${index + 1}`,
-      description: item.description || candidate || "ภาพอ้างอิงที่ผู้ใช้ระบุ"
-    };
-  });
+  const existingReferences = normalizeExistingReferences(analysis, references);
   const existingReferenceLabels = existingReferences.map((item) => item.pictureId);
-  let referencePrompts = await generateJson(
+  let referencePrompts = await trackFailure(outputFolder, state, () => generateJson(
     llm,
     referencePromptsPrompt(story, shots, existingReferences),
     (value) => validateReferencePrompts(value, existingReferenceLabels),
     "reference image prompts"
-  );
+  ));
   const referencePromptsFile = path.join(outputFolder, "04-reference-image-prompts.md");
   await saveText(referencePromptsFile, renderReferencePrompts(referencePrompts));
+  state.referencePrompts = referencePrompts;
+  await checkpoint(outputFolder, state, "reference-prompts-review");
   const referencePromptsApproved = await reviewDocument(terminal, "reference image prompts", referencePromptsFile, async (notes) => {
-    referencePrompts = await generateJson(
+    referencePrompts = await trackFailure(outputFolder, state, () => generateJson(
       llm,
       referencePromptsPrompt(story, shots, existingReferences, notes),
       (value) => validateReferencePrompts(value, existingReferenceLabels),
       "reference image prompts"
-    );
+    ));
     await saveText(referencePromptsFile, renderReferencePrompts(referencePrompts));
+    state.referencePrompts = referencePrompts;
+    await checkpoint(outputFolder, state, "reference-prompts-review");
   });
   state.referencePrompts = referencePrompts;
-  state.status = referencePromptsApproved ? "generating-prompt" : "reference-prompts-review";
-  await saveState(outputFolder, state);
+  await checkpoint(outputFolder, state, referencePromptsApproved ? "generating-prompt" : "reference-prompts-review");
   if (!referencePromptsApproved) return { outputFolder, status: state.status };
 
   console.log("กำลังสร้าง generation prompt ฉบับสุดท้าย...");
   const prefix = settings.promptPrefix ?? "DY,";
-  let generated = await llm.generate({ system: SYSTEM_PROMPT, prompt: finalPrompt(story, shots, prefix, selectedVisualDirection, referencePrompts), temperature: 0.2 });
+  let generated = await trackFailure(outputFolder, state, () => llm.generate({ system: SYSTEM_PROMPT, prompt: finalPrompt(story, shots, prefix, selectedVisualDirection, referencePrompts), temperature: 0.2 }));
   const expectedShotCount = shots.shots.length;
   let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts);
   if (errors.length) {
-    generated = await llm.generate({
+    generated = await trackFailure(outputFolder, state, () => llm.generate({
       system: SYSTEM_PROMPT,
       prompt: `แก้ prompt ให้ผ่านข้อกำหนด: ${errors.join("; ")}\n\n${generated}`,
       temperature: 0.1
-    });
+    }));
     errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts);
   }
-  if (errors.length) throw new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
+  if (errors.length) {
+    const error = new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
+    await saveFailure(outputFolder, state, error);
+    throw error;
+  }
   const promptFile = path.join(outputFolder, "05-generation-prompt.txt");
   await saveText(promptFile, generated.trim());
-  state.status = "complete";
   state.completedAt = new Date().toISOString();
   state.finalPromptFile = promptFile;
-  await saveState(outputFolder, state);
+  await checkpoint(outputFolder, state, "complete");
   return { outputFolder, status: state.status, promptFile };
+}
+
+export async function runResumeWorkflow({ terminal, llm, folder = ".", settings }) {
+  const outputFolder = resolveOutputPath(folder);
+  const state = await loadState(outputFolder);
+  state.outputFolder = outputFolder;
+  state.provider = settings.provider;
+  state.model = settings.model;
+  state.resumeCount = Number(state.resumeCount || 0) + 1;
+  state.lastResumedAt = new Date().toISOString();
+
+  if (state.status === "complete") {
+    return { outputFolder, status: "complete", promptFile: state.finalPromptFile };
+  }
+  if (!state.input?.brief) throw new Error("session ไม่มี brief เริ่มต้น จึง resume ไม่ได้");
+
+  try {
+    const input = state.input;
+    const answers = state.answers || {};
+
+    if (!state.analysis || ["analyzing", "needs-information"].includes(state.status)) {
+      console.log("\nกำลังทำขั้นวิเคราะห์ต่อ...");
+      let analysis = state.analysis || await generateJson(llm, analysisPrompt({ ...input, answers }), validateAnalysis, "analysis");
+      for (let round = 0; round < 3 && analysis.clarificationQuestions.some((item) => item.required); round += 1) {
+        console.log("\nต้องการข้อมูลเพิ่มเติมก่อนวางโครงเรื่อง");
+        for (const question of analysis.clarificationQuestions) {
+          if (answers[question.id]) continue;
+          const answer = await terminal.ask(`${question.question}\n  เหตุผล: ${question.why}`);
+          if (answer) answers[question.id] = answer;
+        }
+        state.answers = answers;
+        state.analysis = analysis;
+        await checkpoint(outputFolder, state, "analyzing");
+        analysis = await generateJson(llm, analysisPrompt({ ...input, answers, previousAnalysis: analysis }), validateAnalysis, "analysis");
+      }
+      if (analysis.clarificationQuestions.some((item) => item.required)) {
+        const proceed = await terminal.choose("ข้อมูลยังไม่ครบ ต้องการเดินหน้าด้วยสมมติฐานที่มีหรือหยุดไว้ก่อน", [
+          { key: "p", label: "เดินหน้าต่อ" },
+          { key: "q", label: "หยุด" }
+        ], "q");
+        if (proceed === "q") {
+          state.analysis = analysis;
+          state.answers = answers;
+          await saveText(path.join(outputFolder, "01-analysis.md"), renderAnalysis(analysis));
+          await checkpoint(outputFolder, state, "needs-information");
+          return { outputFolder, status: state.status };
+        }
+      }
+
+      const selectedVisualDirection = state.selectedVisualDirection || analysis.selectedVisualDirection || await resolveVisualDirection(terminal, analysis);
+      const selectedCores = state.selectedCores || analysis.selectedCores || await selectStoryCores(terminal, analysis);
+      analysis.selectedVisualDirection = selectedVisualDirection;
+      analysis.selectedCores = selectedCores;
+      state.analysis = analysis;
+      state.answers = answers;
+      state.selectedVisualDirection = selectedVisualDirection;
+      state.selectedCores = selectedCores;
+      await saveText(path.join(outputFolder, "01-analysis.md"), renderAnalysis(analysis));
+      await checkpoint(outputFolder, state, "story-generation");
+    }
+
+    const analysis = state.analysis;
+    const selectedVisualDirection = state.selectedVisualDirection || analysis.selectedVisualDirection;
+
+    if (!state.story || ["story-generation", "story-review"].includes(state.status)) {
+      let story = state.story;
+      const storyFile = path.join(outputFolder, "02-story.md");
+      if (!story) {
+        console.log("กำลังสร้างโครงเรื่องต่อ...");
+        story = await generateJson(llm, storyPrompt(analysis, answers), validateStory, "story");
+        state.story = story;
+        await saveText(storyFile, renderStory(story));
+        await checkpoint(outputFolder, state, "story-review");
+      }
+      const approved = await reviewDocument(terminal, "โครงเรื่อง", storyFile, async (notes) => {
+        story = await generateJson(llm, storyPrompt(analysis, answers, notes), validateStory, "story");
+        state.story = story;
+        await saveText(storyFile, renderStory(story));
+        await checkpoint(outputFolder, state, "story-review");
+      });
+      state.story = story;
+      await checkpoint(outputFolder, state, approved ? "shots-generation" : "story-review");
+      if (!approved) return { outputFolder, status: state.status };
+    }
+
+    if (!state.shots || ["shots-generation", "shots-review"].includes(state.status)) {
+      let shots = state.shots;
+      const shotsFile = path.join(outputFolder, "03-shots.md");
+      if (!shots) {
+        console.log("กำลังสร้าง shot list ต่อ...");
+        shots = await generateJson(llm, shotsPrompt(state.story), validateShots, "shot list");
+        state.shots = shots;
+        await saveText(shotsFile, renderShots(shots));
+        await checkpoint(outputFolder, state, "shots-review");
+      }
+      const approved = await reviewDocument(terminal, "shot list", shotsFile, async (notes) => {
+        shots = await generateJson(llm, shotsPrompt(state.story, notes), validateShots, "shot list");
+        state.shots = shots;
+        await saveText(shotsFile, renderShots(shots));
+        await checkpoint(outputFolder, state, "shots-review");
+      });
+      state.shots = shots;
+      await checkpoint(outputFolder, state, approved ? "reference-prompts-generation" : "shots-review");
+      if (!approved) return { outputFolder, status: state.status };
+    }
+
+    if (!state.referencePrompts || ["reference-prompts-generation", "reference-prompts-review"].includes(state.status)) {
+      let referencePrompts = state.referencePrompts;
+      const existingReferences = normalizeExistingReferences(analysis, input.references);
+      const existingReferenceLabels = existingReferences.map((item) => item.pictureId);
+      const referencePromptsFile = path.join(outputFolder, "04-reference-image-prompts.md");
+      if (!referencePrompts) {
+        console.log("กำลังสร้าง prompt สำหรับภาพอ้างอิงต่อ...");
+        referencePrompts = await generateJson(
+          llm,
+          referencePromptsPrompt(state.story, state.shots, existingReferences),
+          (value) => validateReferencePrompts(value, existingReferenceLabels),
+          "reference image prompts"
+        );
+        state.referencePrompts = referencePrompts;
+        await saveText(referencePromptsFile, renderReferencePrompts(referencePrompts));
+        await checkpoint(outputFolder, state, "reference-prompts-review");
+      }
+      const approved = await reviewDocument(terminal, "reference image prompts", referencePromptsFile, async (notes) => {
+        referencePrompts = await generateJson(
+          llm,
+          referencePromptsPrompt(state.story, state.shots, existingReferences, notes),
+          (value) => validateReferencePrompts(value, existingReferenceLabels),
+          "reference image prompts"
+        );
+        state.referencePrompts = referencePrompts;
+        await saveText(referencePromptsFile, renderReferencePrompts(referencePrompts));
+        await checkpoint(outputFolder, state, "reference-prompts-review");
+      });
+      state.referencePrompts = referencePrompts;
+      await checkpoint(outputFolder, state, approved ? "generating-prompt" : "reference-prompts-review");
+      if (!approved) return { outputFolder, status: state.status };
+    }
+
+    if (state.status === "generating-prompt") {
+      console.log("กำลังสร้าง generation prompt ต่อจาก checkpoint...");
+      const prefix = settings.promptPrefix ?? "DY,";
+      let generated = await llm.generate({
+        system: SYSTEM_PROMPT,
+        prompt: finalPrompt(state.story, state.shots, prefix, selectedVisualDirection, state.referencePrompts),
+        temperature: 0.2
+      });
+      const expectedShotCount = state.shots.shots.length;
+      let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts);
+      if (errors.length) {
+        generated = await llm.generate({
+          system: SYSTEM_PROMPT,
+          prompt: `แก้ prompt ให้ผ่านข้อกำหนด: ${errors.join("; ")}\n\n${generated}`,
+          temperature: 0.1
+        });
+        errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts);
+      }
+      if (errors.length) throw new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
+      const promptFile = path.join(outputFolder, "05-generation-prompt.txt");
+      await saveText(promptFile, generated.trim());
+      state.completedAt = new Date().toISOString();
+      state.finalPromptFile = promptFile;
+      await checkpoint(outputFolder, state, "complete");
+      return { outputFolder, status: state.status, promptFile };
+    }
+
+    throw new Error(`ไม่สามารถ resume จาก status ที่ไม่รู้จัก: ${state.status}`);
+  } catch (error) {
+    await saveFailure(outputFolder, state, error);
+    throw error;
+  }
 }

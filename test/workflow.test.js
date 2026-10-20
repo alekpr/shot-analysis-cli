@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import { mkdtemp, readFile } from "node:fs/promises";
-import { runNewWorkflow } from "../src/workflow.js";
+import { runNewWorkflow, runResumeWorkflow } from "../src/workflow.js";
 
 class FakeLlm {
   async generate({ prompt }) {
@@ -84,6 +84,32 @@ class FakeLlm {
   }
 }
 
+class FailFinalLlm extends FakeLlm {
+  async generate(options) {
+    if (options.prompt.includes("REFERENCE_ASSETS:")) throw new Error("temporary final prompt failure");
+    return super.generate(options);
+  }
+}
+
+class FailReferenceLlm extends FakeLlm {
+  async generate(options) {
+    if (options.prompt.includes("สร้าง prompt ภาษาอังกฤษสำหรับ generate ภาพอ้างอิง")) throw new Error("temporary reference prompt failure");
+    return super.generate(options);
+  }
+}
+
+class CountingLlm extends FakeLlm {
+  constructor() {
+    super();
+    this.calls = [];
+  }
+
+  async generate(options) {
+    this.calls.push(options.prompt);
+    return super.generate(options);
+  }
+}
+
 test("workflow creates every reviewed artifact", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-test-"));
   const asks = ["Night Goodbye", "15", "Reels", "9:16", ""];
@@ -109,4 +135,74 @@ test("workflow creates every reviewed artifact", async () => {
   assert.equal(session.selectedCores[0].role, "primary");
   assert.equal(session.selectedVisualDirection.id, "live-action-cinematic");
   assert.equal(session.referencePrompts.assets.length, 3);
+});
+
+test("resume retries only the failed final prompt stage", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-resume-test-"));
+  const asks = ["Resume Test", "15", "Reels", "9:16", ""];
+  const terminal = {
+    ask: async () => asks.shift() ?? "",
+    multiline: async () => "A quiet breakup in a restaurant.",
+    multiSelect: async () => ["pure-love"],
+    choose: async () => "a"
+  };
+  const options = {
+    terminal,
+    args: { output: root },
+    settings: { provider: "gemini", model: "test", promptPrefix: "DY," }
+  };
+
+  await assert.rejects(runNewWorkflow({ ...options, llm: new FailFinalLlm() }), /temporary final prompt failure/);
+  let session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
+  assert.equal(session.status, "generating-prompt");
+  assert.equal(session.lastError.stage, "generating-prompt");
+  assert.ok(session.story);
+  assert.ok(session.shots);
+  assert.ok(session.referencePrompts);
+
+  await assert.rejects(runResumeWorkflow({ terminal, llm: new FailFinalLlm(), folder: root, settings: options.settings }), /temporary final prompt failure/);
+  session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
+  assert.equal(session.lastError.stage, "generating-prompt");
+  assert.match(session.lastError.message, /temporary final prompt failure/);
+
+  const llm = new CountingLlm();
+  const result = await runResumeWorkflow({ terminal, llm, folder: root, settings: options.settings });
+  assert.equal(result.status, "complete");
+  assert.equal(llm.calls.length, 1);
+  assert.match(llm.calls[0], /REFERENCE_ASSETS:/);
+  assert.ok((await readFile(path.join(root, "05-generation-prompt.txt"), "utf8")).length > 0);
+  session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
+  assert.equal(session.lastError, undefined);
+  assert.equal(session.resumeCount, 2);
+});
+
+test("resume continues from reference prompts without regenerating approved stages", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-reference-resume-test-"));
+  const asks = ["Reference Resume", "15", "Reels", "9:16", ""];
+  const terminal = {
+    ask: async () => asks.shift() ?? "",
+    multiline: async () => "A quiet breakup in a restaurant.",
+    multiSelect: async () => ["pure-love"],
+    choose: async () => "a"
+  };
+  const settings = { provider: "gemini", model: "test", promptPrefix: "DY," };
+  await assert.rejects(
+    runNewWorkflow({ terminal, llm: new FailReferenceLlm(), args: { output: root }, settings }),
+    /temporary reference prompt failure/
+  );
+  let session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
+  assert.equal(session.status, "reference-prompts-generation");
+  assert.ok(session.story);
+  assert.ok(session.shots);
+  assert.equal(session.referencePrompts, undefined);
+
+  const llm = new CountingLlm();
+  const result = await runResumeWorkflow({ terminal, llm, folder: root, settings });
+  assert.equal(result.status, "complete");
+  assert.equal(llm.calls.length, 2);
+  assert.match(llm.calls[0], /สร้าง prompt ภาษาอังกฤษสำหรับ generate ภาพอ้างอิง/);
+  assert.match(llm.calls[1], /REFERENCE_ASSETS:/);
+  assert.equal(llm.calls.some((prompt) => prompt.includes("วิเคราะห์ brief")), false);
+  assert.equal(llm.calls.some((prompt) => prompt.includes("สร้างโครงเรื่อง")), false);
+  assert.equal(llm.calls.some((prompt) => prompt.includes("แตกโครงเรื่องเป็น shot list")), false);
 });

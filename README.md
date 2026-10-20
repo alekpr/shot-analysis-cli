@@ -71,6 +71,16 @@ shot-analysis new --brief ./idea.md --output ./my-clip
 shot-analysis status ./my-clip
 ```
 
+## ทำงานต่อจาก checkpoint
+
+หากการเรียก LLM ล้มเหลว อินเทอร์เน็ตหลุด หรือผู้ใช้เลือกหยุดไว้ สามารถทำต่อจากขั้นล่าสุดได้โดยไม่สร้างขั้นที่อนุมัติแล้วซ้ำ:
+
+```bash
+shot-analysis resume ./my-clip
+```
+
+ระบบจะอ่าน `.shot-analysis/session.json` แล้วกลับไปยังขั้น analysis, story, shot list, reference image prompts หรือ final prompt ที่ค้างอยู่ สามารถเปลี่ยน provider/model ใน `.env` หรือด้วย `shot-analysis config` ก่อน resume ได้
+
 ## ไฟล์ความรู้
 
 - [แผนการพัฒนา](./docs/PLAN.md)

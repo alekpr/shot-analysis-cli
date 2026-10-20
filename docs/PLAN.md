@@ -43,7 +43,8 @@ Final prompt → Structure validation → Save artifacts
 - สร้าง prompt สำหรับ character sheets, locations และ continuity objects พร้อม Picture ID ที่ไม่ซ้ำกับ reference เดิม
 - อนุมัติหรือขอแก้โครงเรื่องและ shot list ได้
 - ตรวจเวลา shot ว่าต่อเนื่องและรวมตรงกับความยาวคลิป
-- บันทึก session เพื่อให้ตรวจสถานะและรองรับการทำ resume ในรุ่นถัดไป
+- บันทึก session และ error ล่าสุดเพื่อใช้ตรวจสถานะและ resume
+- คำสั่ง `resume` ทำงานต่อจาก checkpoint ล่าสุดและ retry เฉพาะขั้นที่ยังไม่สำเร็จ
 
 ## โครงสร้างข้อมูล
 
@@ -61,7 +62,6 @@ Final prompt → Structure validation → Save artifacts
 
 ### 0.2
 
-- คำสั่ง `resume` เพื่อทำต่อจากจุด review ที่หยุดไว้
 - เปิด editor ที่ผู้ใช้เลือกจาก CLI
 - JSON Schema แบบ strict สำหรับ provider ที่รองรับ
 - streaming response และ retry/backoff เมื่อ API จำกัดอัตรา

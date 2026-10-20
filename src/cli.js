@@ -4,9 +4,9 @@ import { loadConfig, loadEnvFiles, PROVIDERS, saveConfig, validateConfig } from 
 import { LlmClient } from "./llm.js";
 import { createTerminal } from "./terminal.js";
 import { parseArgs } from "./utils.js";
-import { runNewWorkflow } from "./workflow.js";
+import { runNewWorkflow, runResumeWorkflow } from "./workflow.js";
 
-const HELP = `shot-analysis-cli\n\nคำสั่ง:\n  shot-analysis config                 ตั้งค่า LLM provider และ model\n  shot-analysis new [options]          เริ่มโปรเจกต์คลิปแบบ interactive\n  shot-analysis status [folder]        ดูสถานะโปรเจกต์\n\noptions ของ new:\n  --brief <file>                        อ่าน brief เริ่มต้นจากไฟล์\n  --output <folder>                     กำหนดโฟลเดอร์เอกสารโปรเจกต์\n\nตั้ง provider, model และ API keys ผ่าน .env ได้ ค่าใน .env มีลำดับความสำคัญสูงกว่า settings`;
+const HELP = `shot-analysis-cli\n\nคำสั่ง:\n  shot-analysis config                 ตั้งค่า LLM provider และ model\n  shot-analysis new [options]          เริ่มโปรเจกต์คลิปแบบ interactive\n  shot-analysis resume [folder]        ทำงานต่อจาก checkpoint ล่าสุด\n  shot-analysis status [folder]        ดูสถานะโปรเจกต์\n\noptions ของ new:\n  --brief <file>                        อ่าน brief เริ่มต้นจากไฟล์\n  --output <folder>                     กำหนดโฟลเดอร์เอกสารโปรเจกต์\n\nตั้ง provider, model และ API keys ผ่าน .env ได้ ค่าใน .env มีลำดับความสำคัญสูงกว่า settings`;
 
 async function configure(terminal) {
   const existing = await loadConfig();
@@ -33,6 +33,7 @@ async function showStatus(folder = ".") {
   console.log(`Status: ${state.status}`);
   console.log(`Provider: ${state.provider} / ${state.model}`);
   console.log(`Folder: ${state.outputFolder}`);
+  if (state.lastError) console.log(`Last error: [${state.lastError.stage}] ${state.lastError.message}`);
 }
 
 export async function main(argv) {
@@ -52,11 +53,13 @@ export async function main(argv) {
       await showStatus(argv[1] || ".");
       return;
     }
-    if (command === "new") {
+    if (["new", "resume"].includes(command)) {
       const settings = validateConfig(await loadConfig());
       const llm = new LlmClient(settings, envInfo);
       llm.assertConfigured();
-      const result = await runNewWorkflow({ terminal, llm, args, settings });
+      const result = command === "new"
+        ? await runNewWorkflow({ terminal, llm, args, settings })
+        : await runResumeWorkflow({ terminal, llm, folder: argv[1] || ".", settings });
       console.log(`\nสถานะ: ${result.status}`);
       console.log(`เอกสารอยู่ที่: ${result.outputFolder}`);
       if (result.promptFile) console.log(`Prompt: ${result.promptFile}`);
