@@ -19,6 +19,8 @@ LLM analysis ── ข้อมูลไม่พอ ──→ Clarifying quest
    ↑                                                   │
    └───────────────────────────────────────────────────┘
    ↓
+Visual direction → ถ้าไม่ระบุ ให้เลือก Style และ Mood
+   ↓
 Core checkbox (1–3) → Select Primary Core
    ↓
 Story draft → User approve/revise
@@ -34,6 +36,7 @@ Final prompt → Structure validation → Save artifacts
 - รองรับ Gemini, Anthropic Claude และ DeepSeek ผ่าน REST API
 - เก็บ provider/model/prompt prefix ใน settings ส่วน API key อ่านจาก environment variable
 - ถามข้อมูลเพิ่มเติมได้สูงสุด 3 รอบ
+- ตรวจรูปแบบภาพจาก brief และถามผู้ใช้จากรายการเมื่อยังไม่ระบุ พร้อมรับ mood/โทนเพิ่มเติม
 - ให้ผู้ใช้เลือก Core 1–3 รายการจากรายการที่ LLM เรียงแนะนำ และกำหนด Primary Core
 - อนุมัติหรือขอแก้โครงเรื่องและ shot list ได้
 - ตรวจเวลา shot ว่าต่อเนื่องและรวมตรงกับความยาวคลิป

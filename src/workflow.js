@@ -4,6 +4,7 @@ import { extractJson, resolveOutputPath, slugify } from "./utils.js";
 import { analysisPrompt, finalPrompt, shotsPrompt, storyPrompt, SYSTEM_PROMPT } from "./prompts.js";
 import { renderAnalysis, renderShots, renderStory } from "./render.js";
 import { selectStoryCores } from "./cores.js";
+import { resolveVisualDirection } from "./visual-direction.js";
 import { validateAnalysis, validateFinalPrompt, validateShots, validateStory } from "./validators.js";
 
 async function saveText(target, content) {
@@ -114,6 +115,11 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
       return { outputFolder, status: state.status };
     }
   }
+  const selectedVisualDirection = await resolveVisualDirection(terminal, analysis);
+  analysis.selectedVisualDirection = selectedVisualDirection;
+  state.selectedVisualDirection = selectedVisualDirection;
+  console.log(`รูปแบบภาพ: ${selectedVisualDirection.label}${selectedVisualDirection.mood ? ` — ${selectedVisualDirection.mood}` : ""}`);
+
   console.log("\nเลือก Core ที่จะใช้ขับเคลื่อนคลิป");
   const selectedCores = await selectStoryCores(terminal, analysis);
   analysis.selectedCores = selectedCores;
@@ -154,16 +160,16 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
 
   console.log("กำลังสร้าง generation prompt ฉบับสุดท้าย...");
   const prefix = settings.promptPrefix ?? "DY,";
-  let generated = await llm.generate({ system: SYSTEM_PROMPT, prompt: finalPrompt(story, shots, prefix), temperature: 0.2 });
+  let generated = await llm.generate({ system: SYSTEM_PROMPT, prompt: finalPrompt(story, shots, prefix, selectedVisualDirection), temperature: 0.2 });
   const expectedShotCount = shots.shots.length;
-  let errors = validateFinalPrompt(generated, prefix, expectedShotCount);
+  let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection);
   if (errors.length) {
     generated = await llm.generate({
       system: SYSTEM_PROMPT,
       prompt: `แก้ prompt ให้ผ่านข้อกำหนด: ${errors.join("; ")}\n\n${generated}`,
       temperature: 0.1
     });
-    errors = validateFinalPrompt(generated, prefix, expectedShotCount);
+    errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection);
   }
   if (errors.length) throw new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
   const promptFile = path.join(outputFolder, "04-generation-prompt.txt");

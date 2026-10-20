@@ -16,6 +16,7 @@ class FakeLlm {
         durationSeconds: 15,
         aspectRatio: "9:16",
         visualStyle: "cinematic",
+        visualDirection: { medium: "live-action-cinematic", label: "Live-action cinematic", mood: "melancholic", source: "explicit", evidence: "cinematic brief" },
         audience: "adult drama viewers",
         desiredEmotion: "melancholy",
         coreChoices: [{ name: "รักและการเสียสละ", reason: "emotional closure" }],
@@ -47,6 +48,7 @@ class FakeLlm {
         endingType: "resolved",
         dialogueLanguage: "English",
         visualStyle: "cinematic",
+        visualDirection: { id: "live-action-cinematic", label: "Live-action cinematic", mood: "melancholic", application: "cinematic lighting and camera" },
         soundDirection: "quiet restaurant",
         risks: [],
         rationale: "Fits 15 seconds."
@@ -65,7 +67,7 @@ class FakeLlm {
         totalDuration: 15
       });
     }
-    return "DY,subject_definitions:\n<Subject 1> is a woman.\nsummary:\nB\nretention_analysis:\nC\ndetailed_description:\n[Shot 1] Start.\n[Shot 2] At 00:05.000 Continue.\n[Shot 3] At 00:10.000 End.\noverall_soundscape:\nE\nnon_diegetic_music:\nF";
+    return "DY,subject_definitions:\n<Subject 1> is a woman in a Live-action cinematic style with a melancholic tone.\nsummary:\nVisual direction: Live-action cinematic; Mood: melancholic\nretention_analysis:\nC\ndetailed_description:\n[Shot 1] Start.\n[Shot 2] At 00:05.000 Continue.\n[Shot 3] At 00:10.000 End.\noverall_soundscape:\nE\nnon_diegetic_music:\nF";
   }
 }
 
@@ -92,4 +94,5 @@ test("workflow creates every reviewed artifact", async () => {
   assert.match(analysis, /Primary — รักบริสุทธิ์และการเสียสละ/);
   const session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
   assert.equal(session.selectedCores[0].role, "primary");
+  assert.equal(session.selectedVisualDirection.id, "live-action-cinematic");
 });

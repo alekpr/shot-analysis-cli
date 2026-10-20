@@ -34,3 +34,8 @@ test("rejects environment aliases and missing shot timestamps", () => {
   const prompt = `DY,subject_definitions:\n<Environment 1> is a room.\nsummary:\nB\nretention_analysis:\nC\ndetailed_description:\n[Shot 1]\n[Shot 2] (5s)\noverall_soundscape:\nE\nnon_diegetic_music:\nF`;
   assert.equal(validateFinalPrompt(prompt, "DY,", 2).length, 2);
 });
+
+test("requires the selected visual direction and mood in the final prompt", () => {
+  const prompt = `DY,subject_definitions:\n<Subject 1> is a room.\nsummary:\nAnime scene\nretention_analysis:\nC\ndetailed_description:\n[Shot 1] Start.\noverall_soundscape:\nE\nnon_diegetic_music:\nF`;
+  assert.deepEqual(validateFinalPrompt(prompt, "DY,", 1, { label: "Anime", mood: "dreamy" }), ["prompt ไม่มี Mood: dreamy"]);
+});

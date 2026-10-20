@@ -15,6 +15,9 @@ export function validateAnalysis(value) {
     errors.push("durationSeconds ต้องมากกว่า 0");
   }
   if (!Array.isArray(value?.clarificationQuestions)) errors.push("clarificationQuestions ต้องเป็น array");
+  if (!value?.visualDirection || !["explicit", "missing"].includes(value.visualDirection.source)) {
+    errors.push("analysis ต้องมี visualDirection.source เป็น explicit หรือ missing");
+  }
   return errors;
 }
 
@@ -24,6 +27,7 @@ export function validateStory(value) {
     if (!value?.[key]) errors.push(`story ไม่มี ${key}`);
   }
   if (!Array.isArray(value?.characters) || value.characters.length === 0) errors.push("story ต้องมี characters");
+  if (!value?.visualDirection?.label) errors.push("story ต้องมี visualDirection");
   return errors;
 }
 
@@ -46,7 +50,7 @@ export function validateShots(value) {
   return errors;
 }
 
-export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0) {
+export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0, visualDirection) {
   const errors = [];
   if (!value.trimStart().startsWith(`${prefix}subject_definitions:`)) {
     errors.push(`prompt ต้องเริ่มด้วย ${prefix}subject_definitions:`);
@@ -67,6 +71,12 @@ export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0
       const timestamp = new RegExp(`\\[Shot ${number}\\]\\s+At\\s+\\d{2}:\\d{2}\\.\\d{3}`);
       if (!timestamp.test(value)) errors.push(`[Shot ${number}] ไม่มีเวลาเริ่มรูปแบบ At 00:00.000`);
     }
+  }
+  if (visualDirection?.label && !value.toLocaleLowerCase().includes(visualDirection.label.toLocaleLowerCase())) {
+    errors.push(`prompt ไม่มี Visual direction: ${visualDirection.label}`);
+  }
+  if (visualDirection?.mood && !value.toLocaleLowerCase().includes(visualDirection.mood.toLocaleLowerCase())) {
+    errors.push(`prompt ไม่มี Mood: ${visualDirection.mood}`);
   }
   return errors;
 }

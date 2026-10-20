@@ -20,6 +20,7 @@ export function analysisPrompt(input) {
   "durationSeconds": 15,
   "aspectRatio": "string",
   "visualStyle": "string",
+  "visualDirection": {"medium":"live-action-cinematic|anime|3d-animation|2d-illustration|documentary|commercial|custom|null","label":"string|null","mood":"string|null","source":"explicit|missing","evidence":"ข้อความจาก brief หรือเหตุผลที่ระบุว่าไม่พบ"},
   "audience": "string",
   "desiredEmotion": "string",
   "coreChoices": [{"name":"string","reason":"string"}],
@@ -32,7 +33,7 @@ export function analysisPrompt(input) {
   "missingInformation": ["string"],
   "clarificationQuestions": [{"id":"snake_case","question":"คำถามภาษาไทยที่ตอบง่าย","why":"string","required":true}],
   "readiness": {"score": 0, "canProceed": false, "rationale": "string"}
-}\nถามเฉพาะข้อมูลที่มีผลต่อโครงเรื่องหรือการสร้าง shot จริง ไม่เกิน 7 ข้อ หากอนุมานได้อย่างปลอดภัยให้ระบุเป็นสมมติฐานใน constraints แทนการถาม`;
+}\nvisualDirection.source ต้องเป็น explicit เฉพาะเมื่อ brief หรือคำตอบของผู้ใช้ระบุรูปแบบภาพอย่างชัดเจน เช่น ภาพยนตร์, live action, anime, 3D, illustration, documentary หรือ commercial หากไม่พบให้ตั้ง source เป็น missing และ medium/label เป็น null ห้ามเดา และไม่ต้องสร้าง clarificationQuestions สำหรับ visualDirection เพราะ CLI จะถามจากรายการโดยตรง ถามข้อมูลอื่นเฉพาะที่มีผลต่อโครงเรื่องหรือการสร้าง shot จริง ไม่เกิน 7 ข้อ หากอนุมานได้อย่างปลอดภัยให้ระบุเป็นสมมติฐานใน constraints แทนการถาม`;
 }
 
 export function storyPrompt(analysis, answers, revision = "") {
@@ -52,10 +53,11 @@ export function storyPrompt(analysis, answers, revision = "") {
   "endingType":"resolved|open|resolved_with_tease",
   "dialogueLanguage":"string",
   "visualStyle":"string",
+  "visualDirection":{"id":"string","label":"string","mood":"string","application":"อธิบายวิธีใช้กับตัวละคร ฉาก แสง สี กล้อง และการเคลื่อนไหว"},
   "soundDirection":"string",
   "risks":["string"],
   "rationale":"string"
-}\nต้องใช้ selectedCores จาก ANALYSIS ทุก Core ตาม role ที่ผู้ใช้เลือก โดยให้ primary เป็นแกนขับเคลื่อนเรื่องและ secondary เป็นแกนสนับสนุน ห้ามแทนด้วย Core อื่น ต้องบอกความสัมพันธ์เหตุและผลชัดเจน ให้จุดเริ่ม กลาง และจบพอดีกับระยะเวลา`;
+}\nต้องใช้ selectedVisualDirection จาก ANALYSIS เป็นข้อกำหนดด้านภาพของเรื่อง และใช้ selectedCores ทุก Core ตาม role ที่ผู้ใช้เลือก โดยให้ primary เป็นแกนขับเคลื่อนเรื่องและ secondary เป็นแกนสนับสนุน ห้ามแทนด้วย Core อื่น ต้องบอกความสัมพันธ์เหตุและผลชัดเจน ให้จุดเริ่ม กลาง และจบพอดีกับระยะเวลา`;
 }
 
 export function shotsPrompt(story, revision = "") {
@@ -85,8 +87,8 @@ export function shotsPrompt(story, revision = "") {
 }\nเวลา shot แรกต้องเริ่ม 0, แต่ละ shot ต้องต่อกันโดยไม่มีช่องว่างหรือซ้อนกัน และ shot สุดท้ายต้องจบตรง durationSeconds`;
 }
 
-export function finalPrompt(story, shots, prefix = "DY,") {
-  return `สร้าง prompt ภาษาอังกฤษตามโครงสร้างตัวอย่างอย่างเคร่งครัด ข้อมูลทั้งหมดต้องมาจาก STORY และ SHOTS เท่านั้น\n\nSTORY:\n${JSON.stringify(story, null, 2)}\nSHOTS:\n${JSON.stringify(shots, null, 2)}\n\nข้อกำหนด:\n- บรรทัดแรกต้องเริ่มด้วย ${prefix}subject_definitions:\n- ใช้หัวข้อตามลำดับ: subject_definitions, summary, retention_analysis, detailed_description, overall_soundscape, non_diegetic_music\n- กำหนดทุกตัวละครและสภาพแวดล้อมเป็น <Subject N> เท่านั้น แม้ Subject นั้นจะเป็นสถานที่ ห้ามใช้ <Environment N> หรือรูปแบบอื่น\n- หากมี reference ให้ใช้ <Picture N> ตามข้อมูลที่มีเท่านั้น\n- detailed_description ต้องแบ่ง [Shot N] และตั้งแต่ shot 2 เป็นต้นไป หัวบรรทัดต้องใช้รูปแบบ [Shot N] At 00:05.000 โดยคำนวณจาก startTime จริง ห้ามใช้เพียง (5s)\n- บทพูดใช้รูปแบบ <Subject N> (S1) ... <d>[English] dialogue</d> โดยเปลี่ยนภาษาตามข้อมูลจริง\n- retention_analysis ต้องระบุ shot ที่ subject ปรากฏและสิ่งที่ต้องรักษา\n- ห้ามสร้าง reference image ที่ผู้ใช้ไม่ได้ให้\n- ห้ามมี Markdown heading หรือ code fence\n- ส่งเฉพาะ prompt ฉบับสมบูรณ์`;
+export function finalPrompt(story, shots, prefix = "DY,", visualDirection = story.visualDirection) {
+  return `สร้าง prompt ภาษาอังกฤษตามโครงสร้างตัวอย่างอย่างเคร่งครัด ข้อมูลทั้งหมดต้องมาจาก STORY, SHOTS และ VISUAL_DIRECTION เท่านั้น\n\nSTORY:\n${JSON.stringify(story, null, 2)}\nSHOTS:\n${JSON.stringify(shots, null, 2)}\nVISUAL_DIRECTION:\n${JSON.stringify(visualDirection, null, 2)}\n\nข้อกำหนด:\n- บรรทัดแรกต้องเริ่มด้วย ${prefix}subject_definitions:\n- ใช้หัวข้อตามลำดับ: subject_definitions, summary, retention_analysis, detailed_description, overall_soundscape, non_diegetic_music\n- กำหนดทุกตัวละครและสภาพแวดล้อมเป็น <Subject N> เท่านั้น แม้ Subject นั้นจะเป็นสถานที่ ห้ามใช้ <Environment N> หรือรูปแบบอื่น\n- หากมี reference ให้ใช้ <Picture N> ตามข้อมูลที่มีเท่านั้น\n- detailed_description ต้องแบ่ง [Shot N] และตั้งแต่ shot 2 เป็นต้นไป หัวบรรทัดต้องใช้รูปแบบ [Shot N] At 00:05.000 โดยคำนวณจาก startTime จริง ห้ามใช้เพียง (5s)\n- บทพูดใช้รูปแบบ <Subject N> (S1) ... <d>[English] dialogue</d> โดยเปลี่ยนภาษาตามข้อมูลจริง\n- retention_analysis ต้องระบุ shot ที่ subject ปรากฏและสิ่งที่ต้องรักษา\n- ต้องสะท้อน VISUAL_DIRECTION ทั้งรูปแบบภาพและ mood อย่างสม่ำเสมอใน subject_definitions, summary และทุก shot โดยระบุผลต่อรูปลักษณ์ตัวละคร ฉาก แสง สี เลนส์ กล้อง และการเคลื่อนไหวเท่าที่เกี่ยวข้อง\n- ห้ามสร้าง reference image ที่ผู้ใช้ไม่ได้ให้\n- ห้ามมี Markdown heading หรือ code fence\n- ส่งเฉพาะ prompt ฉบับสมบูรณ์`;
 }
 
 export const SYSTEM_PROMPT = "คุณเป็นนักวิเคราะห์บท ผู้กำกับ และผู้วาง shot list สำหรับวิดีโอสั้น ให้ความสำคัญกับความชัดเจน ความต่อเนื่อง ความเป็นไปได้ และเจตนาของผู้ใช้";
