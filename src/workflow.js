@@ -122,30 +122,40 @@ function normalizeExistingReferences(analysis, references = "") {
   });
 }
 
-async function generateJson(llm, prompt, validator, label) {
+export async function generateJson(llm, prompt, validator, label, { maxAttempts = 4 } = {}) {
   let response = await llm.generate({ system: SYSTEM_PROMPT, prompt, json: true });
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  let lastIssue = "ไม่ทราบสาเหตุ";
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    let value;
     try {
-      const value = extractJson(response);
-      const errors = validator(value);
-      if (errors.length === 0) return value;
-      response = await llm.generate({
-        system: SYSTEM_PROMPT,
-        prompt: `แก้ JSON สำหรับ ${label} ให้ผ่าน validation ต่อไปนี้: ${errors.join("; ")}\n\nJSON เดิม:\n${JSON.stringify(value, null, 2)}\nตอบเฉพาะ JSON ที่แก้แล้ว`,
-        json: true,
-        temperature: 0.1
-      });
+      value = extractJson(response);
     } catch (error) {
-      if (attempt === 1) throw new Error(`${label} ไม่ผ่านการตรวจ: ${error.message}`);
+      lastIssue = error.message;
+      if (attempt === maxAttempts - 1) break;
+      const repairPrompt = attempt === 0
+        ? `คำตอบต่อไปนี้ไม่ใช่ JSON ที่อ่านได้ (${error.message}) กรุณาซ่อมให้เป็น JSON object ที่สมบูรณ์โดยไม่ตัดข้อมูล ตอบเฉพาะ JSON และห้ามใช้ Markdown code fence:\n\n${response}`
+        : `สร้าง JSON สำหรับ ${label} ใหม่ทั้งหมดจากคำสั่งต้นฉบับด้านล่าง คำตอบก่อนหน้าซ่อมไม่ได้เพราะ ${error.message}\nตอบเฉพาะ JSON object ที่สมบูรณ์และ parse ด้วย JSON.parse ได้ ห้ามใช้ Markdown code fence และเขียนเนื้อหาให้กระชับพอที่จะจบ object ครบทุกวงเล็บ\n\nคำสั่งต้นฉบับ:\n${prompt}`;
       response = await llm.generate({
         system: SYSTEM_PROMPT,
-        prompt: `คำตอบต่อไปนี้ไม่ใช่ JSON ที่อ่านได้ กรุณาแปลงเป็น JSON ที่ถูกต้องโดยไม่ตัดข้อมูล:\n${response}`,
+        prompt: repairPrompt,
         json: true,
         temperature: 0.1
       });
+      continue;
     }
+
+    const errors = validator(value);
+    if (errors.length === 0) return value;
+    lastIssue = errors.join("; ");
+    if (attempt === maxAttempts - 1) break;
+    response = await llm.generate({
+      system: SYSTEM_PROMPT,
+      prompt: `แก้ JSON สำหรับ ${label} ให้ผ่าน validation ต่อไปนี้: ${lastIssue}\n\nJSON เดิม:\n${JSON.stringify(value, null, 2)}\nตอบเฉพาะ JSON object ที่สมบูรณ์และ parse ด้วย JSON.parse ได้ ห้ามใช้ Markdown code fence`,
+      json: true,
+      temperature: 0.1
+    });
   }
-  throw new Error(`${label} ไม่ผ่านการตรวจหลังแก้ไข`);
+  throw new Error(`${label} ไม่ผ่านการตรวจหลังลอง ${maxAttempts} ครั้ง: ${lastIssue}`);
 }
 
 async function reviewDocument(terminal, label, file, regenerate) {

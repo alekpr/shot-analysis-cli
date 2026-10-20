@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { runNewWorkflow, runResumeWorkflow } from "../src/workflow.js";
+import { generateJson, runNewWorkflow, runResumeWorkflow } from "../src/workflow.js";
 
 function fakeShot({ number, startTime, endTime, objective, action, composition, emotion }) {
   return {
@@ -138,6 +138,50 @@ class CountingLlm extends FakeLlm {
     return super.generate(options);
   }
 }
+
+test("generateJson regenerates from the original prompt after repeated malformed JSON", async () => {
+  const responses = [
+    '{"title":"broken"',
+    '{"title":"still broken"',
+    '{"title":"recovered"}'
+  ];
+  const prompts = [];
+  const llm = {
+    async generate({ prompt }) {
+      prompts.push(prompt);
+      return responses.shift();
+    }
+  };
+
+  const result = await generateJson(llm, "ORIGINAL STORY REQUEST", (value) => value.title ? [] : ["ไม่มี title"], "story");
+  assert.equal(result.title, "recovered");
+  assert.equal(prompts.length, 3);
+  assert.match(prompts[1], /กรุณาซ่อมให้เป็น JSON object/);
+  assert.match(prompts[2], /ORIGINAL STORY REQUEST/);
+  assert.match(prompts[2], /สร้าง JSON สำหรับ story ใหม่ทั้งหมด/);
+});
+
+test("generateJson reports the final parse error after exhausting retries", async () => {
+  const llm = { generate: async () => '{"title":' };
+  await assert.rejects(
+    generateJson(llm, "ORIGINAL", () => [], "story", { maxAttempts: 3 }),
+    /story ไม่ผ่านการตรวจหลังลอง 3 ครั้ง/
+  );
+});
+
+test("generateJson repairs a parsed response that fails schema validation", async () => {
+  const responses = ['{"title":""}', '{"title":"fixed"}'];
+  const prompts = [];
+  const llm = {
+    async generate({ prompt }) {
+      prompts.push(prompt);
+      return responses.shift();
+    }
+  };
+  const result = await generateJson(llm, "ORIGINAL", (value) => value.title ? [] : ["story ไม่มี title"], "story");
+  assert.equal(result.title, "fixed");
+  assert.match(prompts[1], /story ไม่มี title/);
+});
 
 test("workflow creates every reviewed artifact", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-test-"));
