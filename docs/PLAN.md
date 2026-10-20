@@ -27,6 +27,8 @@ Story draft → User approve/revise
    ↓
 Shot list → Timing/continuity validation → User approve/revise
    ↓
+Reference image prompts → Character / Location / Object → User approve/revise
+   ↓
 Final prompt → Structure validation → Save artifacts
 ```
 
@@ -38,6 +40,7 @@ Final prompt → Structure validation → Save artifacts
 - ถามข้อมูลเพิ่มเติมได้สูงสุด 3 รอบ
 - ตรวจรูปแบบภาพจาก brief และถามผู้ใช้จากรายการเมื่อยังไม่ระบุ พร้อมรับ mood/โทนเพิ่มเติม
 - ให้ผู้ใช้เลือก Core 1–3 รายการจากรายการที่ LLM เรียงแนะนำ และกำหนด Primary Core
+- สร้าง prompt สำหรับ character sheets, locations และ continuity objects พร้อม Picture ID ที่ไม่ซ้ำกับ reference เดิม
 - อนุมัติหรือขอแก้โครงเรื่องและ shot list ได้
 - ตรวจเวลา shot ว่าต่อเนื่องและรวมตรงกับความยาวคลิป
 - บันทึก session เพื่อให้ตรวจสถานะและรองรับการทำ resume ในรุ่นถัดไป
@@ -50,7 +53,8 @@ Final prompt → Structure validation → Save artifacts
 - `01-analysis.md`
 - `02-story.md`
 - `03-shots.md`
-- `04-generation-prompt.txt`
+- `04-reference-image-prompts.md`
+- `05-generation-prompt.txt`
 - `.shot-analysis/session.json`
 
 ## แผนรุ่นต่อไป

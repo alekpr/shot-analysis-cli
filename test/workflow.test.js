@@ -67,7 +67,20 @@ class FakeLlm {
         totalDuration: 15
       });
     }
-    return "DY,subject_definitions:\n<Subject 1> is a woman in a Live-action cinematic style with a melancholic tone.\nsummary:\nVisual direction: Live-action cinematic; Mood: melancholic\nretention_analysis:\nC\ndetailed_description:\n[Shot 1] Start.\n[Shot 2] At 00:05.000 Continue.\n[Shot 3] At 00:10.000 End.\noverall_soundscape:\nE\nnon_diegetic_music:\nF";
+    if (prompt.includes("สร้าง prompt ภาษาอังกฤษสำหรับ generate ภาพอ้างอิง")) {
+      return JSON.stringify({
+        projectTitle: "Night Goodbye",
+        globalStyle: { visualDirection: "Live-action cinematic", mood: "melancholic", styleLock: "warm restaurant lighting" },
+        existingReferences: [],
+        assets: [
+          { pictureId: "Picture 1", assetType: "character", name: "A character sheet", linkedSubjects: ["Subject 1"], usedInShots: [1, 2, 3], purpose: "character consistency", prompt: "Character sheet of A with front, side, and back views.", negativePrompt: "other characters, text", consistencyNotes: ["same coat"] },
+          { pictureId: "Picture 2", assetType: "location", name: "Restaurant", linkedSubjects: [], usedInShots: [1, 2, 3], purpose: "location consistency", prompt: "Empty warm restaurant environment reference.", negativePrompt: "people, text", consistencyNotes: ["same table layout"] },
+          { pictureId: "Picture 3", assetType: "object", name: "Table", linkedSubjects: [], usedInShots: [1, 2], purpose: "prop continuity", prompt: "Isolated restaurant table from multiple angles.", negativePrompt: "people, food", consistencyNotes: ["dark wood"] }
+        ],
+        usageGuide: ["Generate each image and attach it with its assigned Picture ID."]
+      });
+    }
+    return "DY,subject_definitions:\n<Subject 1> is a woman in a Live-action cinematic style with a melancholic tone, matching <Picture 1>. The restaurant matches <Picture 2> and table matches <Picture 3>.\nsummary:\nVisual direction: Live-action cinematic; Mood: melancholic\nretention_analysis:\nUse <Picture 1>, <Picture 2>, and <Picture 3>.\ndetailed_description:\n[Shot 1] Start.\n[Shot 2] At 00:05.000 Continue.\n[Shot 3] At 00:10.000 End.\noverall_soundscape:\nE\nnon_diegetic_music:\nF";
   }
 }
 
@@ -87,7 +100,7 @@ test("workflow creates every reviewed artifact", async () => {
     settings: { provider: "gemini", model: "test", promptPrefix: "DY," }
   });
   assert.equal(result.status, "complete");
-  for (const file of ["00-brief.md", "01-analysis.md", "02-story.md", "03-shots.md", "04-generation-prompt.txt", ".shot-analysis/session.json"]) {
+  for (const file of ["00-brief.md", "01-analysis.md", "02-story.md", "03-shots.md", "04-reference-image-prompts.md", "05-generation-prompt.txt", ".shot-analysis/session.json"]) {
     assert.ok((await readFile(path.join(root, file), "utf8")).length > 0, `${file} should exist`);
   }
   const analysis = await readFile(path.join(root, "01-analysis.md"), "utf8");
@@ -95,4 +108,5 @@ test("workflow creates every reviewed artifact", async () => {
   const session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
   assert.equal(session.selectedCores[0].role, "primary");
   assert.equal(session.selectedVisualDirection.id, "live-action-cinematic");
+  assert.equal(session.referencePrompts.assets.length, 3);
 });

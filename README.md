@@ -60,7 +60,8 @@ shot-analysis new --brief ./idea.md --output ./my-clip
 4. แสดงรายการ Core แบบ checkbox ให้เลือก 1–3 รายการ แล้วกำหนด Primary Core
 5. สร้าง `02-story.md` ให้ผู้ใช้อนุมัติหรือขอแก้ไข
 6. สร้าง `03-shots.md` และตรวจเวลา/continuity
-7. เมื่อผู้ใช้อนุมัติ จึงสร้าง `04-generation-prompt.txt` ซึ่งต้องมีรูปแบบภาพและ mood ที่เลือก
+7. สร้าง `04-reference-image-prompts.md` สำหรับ Character sheets, Locations และ Objects พร้อม Picture ID แล้วให้ผู้ใช้อนุมัติหรือขอแก้ไข
+8. สร้าง `05-generation-prompt.txt` ซึ่งใช้ Picture ID, รูปแบบภาพ และ mood ที่อนุมัติแล้ว
 
 ในหน้าเลือก Core ใช้ปุ่มลูกศรขึ้น/ลงเพื่อเลื่อน, `Space` เพื่อเลือกหรือยกเลิก และ `Enter` เพื่อยืนยัน รายการที่ LLM แนะนำจะแสดงด้านบนพร้อมเครื่องหมาย `★ แนะนำ` และสามารถเลือก `กำหนด Core เอง` ได้
 

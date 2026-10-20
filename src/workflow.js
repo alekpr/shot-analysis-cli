@@ -1,11 +1,11 @@
 import path from "node:path";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { extractJson, resolveOutputPath, slugify } from "./utils.js";
-import { analysisPrompt, finalPrompt, shotsPrompt, storyPrompt, SYSTEM_PROMPT } from "./prompts.js";
-import { renderAnalysis, renderShots, renderStory } from "./render.js";
+import { analysisPrompt, finalPrompt, referencePromptsPrompt, shotsPrompt, storyPrompt, SYSTEM_PROMPT } from "./prompts.js";
+import { renderAnalysis, renderReferencePrompts, renderShots, renderStory } from "./render.js";
 import { selectStoryCores } from "./cores.js";
 import { resolveVisualDirection } from "./visual-direction.js";
-import { validateAnalysis, validateFinalPrompt, validateShots, validateStory } from "./validators.js";
+import { validateAnalysis, validateFinalPrompt, validateReferencePrompts, validateShots, validateStory } from "./validators.js";
 
 async function saveText(target, content) {
   await writeFile(target, content.endsWith("\n") ? content : `${content}\n`, "utf8");
@@ -154,25 +154,59 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
     await saveText(shotsFile, renderShots(shots));
   });
   state.shots = shots;
-  state.status = shotsApproved ? "generating-prompt" : "shots-review";
+  state.status = shotsApproved ? "reference-prompts-generation" : "shots-review";
   await saveState(outputFolder, state);
   if (!shotsApproved) return { outputFolder, status: state.status };
 
+  console.log("กำลังสร้าง prompt สำหรับภาพอ้างอิง...");
+  const rawExistingReferences = analysis.references?.length
+    ? analysis.references
+    : references.split(",").map((item) => item.trim()).filter(Boolean).map((label) => ({ label, description: "ภาพอ้างอิงที่ผู้ใช้ระบุ" }));
+  const existingReferences = rawExistingReferences.map((item, index) => {
+    const candidate = String(item.pictureId || item.label || "").trim().replace(/^<|>$/g, "");
+    return {
+      pictureId: /^Picture \d+$/i.test(candidate) ? candidate : `Picture ${index + 1}`,
+      description: item.description || candidate || "ภาพอ้างอิงที่ผู้ใช้ระบุ"
+    };
+  });
+  const existingReferenceLabels = existingReferences.map((item) => item.pictureId);
+  let referencePrompts = await generateJson(
+    llm,
+    referencePromptsPrompt(story, shots, existingReferences),
+    (value) => validateReferencePrompts(value, existingReferenceLabels),
+    "reference image prompts"
+  );
+  const referencePromptsFile = path.join(outputFolder, "04-reference-image-prompts.md");
+  await saveText(referencePromptsFile, renderReferencePrompts(referencePrompts));
+  const referencePromptsApproved = await reviewDocument(terminal, "reference image prompts", referencePromptsFile, async (notes) => {
+    referencePrompts = await generateJson(
+      llm,
+      referencePromptsPrompt(story, shots, existingReferences, notes),
+      (value) => validateReferencePrompts(value, existingReferenceLabels),
+      "reference image prompts"
+    );
+    await saveText(referencePromptsFile, renderReferencePrompts(referencePrompts));
+  });
+  state.referencePrompts = referencePrompts;
+  state.status = referencePromptsApproved ? "generating-prompt" : "reference-prompts-review";
+  await saveState(outputFolder, state);
+  if (!referencePromptsApproved) return { outputFolder, status: state.status };
+
   console.log("กำลังสร้าง generation prompt ฉบับสุดท้าย...");
   const prefix = settings.promptPrefix ?? "DY,";
-  let generated = await llm.generate({ system: SYSTEM_PROMPT, prompt: finalPrompt(story, shots, prefix, selectedVisualDirection), temperature: 0.2 });
+  let generated = await llm.generate({ system: SYSTEM_PROMPT, prompt: finalPrompt(story, shots, prefix, selectedVisualDirection, referencePrompts), temperature: 0.2 });
   const expectedShotCount = shots.shots.length;
-  let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection);
+  let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts);
   if (errors.length) {
     generated = await llm.generate({
       system: SYSTEM_PROMPT,
       prompt: `แก้ prompt ให้ผ่านข้อกำหนด: ${errors.join("; ")}\n\n${generated}`,
       temperature: 0.1
     });
-    errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection);
+    errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts);
   }
   if (errors.length) throw new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
-  const promptFile = path.join(outputFolder, "04-generation-prompt.txt");
+  const promptFile = path.join(outputFolder, "05-generation-prompt.txt");
   await saveText(promptFile, generated.trim());
   state.status = "complete";
   state.completedAt = new Date().toISOString();

@@ -13,6 +13,14 @@ export function renderStory(value) {
   return `# โครงเรื่อง: ${value.title}\n\n## Logline\n\n${value.logline}\n\n## สิ่งที่ผู้ชมจะได้รับ\n\n${value.audiencePromise}\n\n## แกนเรื่องและหน้าที่\n\n${list(value.cores?.map((item) => `${item.name}: ${item.function}`))}\n\n## เส้นทางอารมณ์\n\n${list(value.emotionalArc?.map((item) => `${item.phase} — ${item.emotion}: ${item.storyFunction}`))}\n\n## ตัวละคร\n\n${value.characters?.map((item) => `### ${item.id}: ${item.name}\n\n${item.description}\n\nกฎความต่อเนื่อง:\n${list(item.continuityRules)}`).join("\n\n") || "ไม่มีข้อมูล"}\n\n## สถานที่\n\n${value.setting?.description || "ไม่มีข้อมูล"}\n\n${list(value.setting?.continuityRules)}\n\n## โครงสร้างเรื่อง\n\n### Hook\n\n${value.hook}\n\n### Build-up\n\n${list(value.buildUp)}\n\n### Climax\n\n${value.climax}\n\n### Ending (${value.endingType})\n\n${value.ending}\n\n## ภาพและเสียง\n\n- Visual style: ${value.visualStyle}\n- Visual direction: ${value.visualDirection?.label || "ไม่ได้ระบุ"}\n- Mood/โทน: ${value.visualDirection?.mood || "ไม่ได้ระบุเพิ่มเติม"}\n- การนำไปใช้: ${value.visualDirection?.application || "ไม่มีข้อมูล"}\n- Sound direction: ${value.soundDirection}\n- Dialogue language: ${value.dialogueLanguage}\n\n## ความเสี่ยงที่ต้องตรวจ\n\n${list(value.risks)}\n\n## เหตุผลของโครงสร้าง\n\n${value.rationale}\n`;
 }
 
+export function renderReferencePrompts(value) {
+  const assets = value.assets?.map((asset) => `## ${asset.pictureId} — ${asset.name}\n\n- ประเภท: ${asset.assetType}\n- ใช้กับ: ${(asset.linkedSubjects || []).join(", ") || "ไม่มี Subject โดยตรง"}\n- ใช้ใน shots: ${(asset.usedInShots || []).join(", ")}\n- จุดประสงค์: ${asset.purpose}\n\n### Prompt\n\n${asset.prompt}\n\n### Negative prompt\n\n${asset.negativePrompt}\n\n### กฎความต่อเนื่อง\n\n${list(asset.consistencyNotes)}\n`).join("\n") || "ไม่มี reference assets";
+  const existing = value.existingReferences?.length
+    ? value.existingReferences.map((item) => `- ${item.pictureId}: ${item.description}`).join("\n")
+    : "- ไม่มีภาพอ้างอิงเดิม";
+  return `# Reference image prompts: ${value.projectTitle}\n\n## Global style lock\n\n- Visual direction: ${value.globalStyle?.visualDirection}\n- Mood: ${value.globalStyle?.mood || "ไม่ได้ระบุเพิ่มเติม"}\n- Style lock: ${value.globalStyle?.styleLock}\n\n## Existing references\n\n${existing}\n\n${assets}\n## วิธีใช้งาน\n\n${list(value.usageGuide)}\n`;
+}
+
 export function renderShots(value) {
   const shots = value.shots?.map((shot) => {
     const dialogue = shot.dialogue?.length

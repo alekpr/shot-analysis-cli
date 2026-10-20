@@ -50,7 +50,47 @@ export function validateShots(value) {
   return errors;
 }
 
-export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0, visualDirection) {
+export function validateReferencePrompts(value, existingReferenceLabels = []) {
+  const errors = [];
+  if (!value || typeof value !== "object") return ["reference prompts ต้องเป็น object"];
+  if (!value.globalStyle?.visualDirection) errors.push("reference prompts ไม่มี globalStyle.visualDirection");
+  if (!Array.isArray(value.assets) || value.assets.length === 0) return [...errors, "reference prompts ไม่มี assets"];
+
+  const normalizePictureId = (item) => String(item || "").trim().replace(/^<|>$/g, "").toLowerCase();
+  const existing = new Set(existingReferenceLabels.map(normalizePictureId));
+  const existingNumbers = existingReferenceLabels
+    .map((item) => Number(String(item).replace(/^<|>$/g, "").match(/^Picture (\d+)$/i)?.[1]))
+    .filter(Number.isFinite);
+  const firstNewPictureNumber = existingNumbers.length ? Math.max(...existingNumbers) + 1 : 1;
+  const returnedExisting = new Set((value.existingReferences || []).map((item) => normalizePictureId(item.pictureId)));
+  for (const expected of existing) {
+    if (!returnedExisting.has(expected)) errors.push(`existingReferences ไม่มี ${expected}`);
+  }
+  const seen = new Set();
+  let hasCharacter = false;
+  let hasLocation = false;
+  value.assets.forEach((asset, index) => {
+    const label = String(asset.pictureId || "").trim();
+    const normalized = normalizePictureId(label);
+    if (!/^Picture \d+$/.test(label)) errors.push(`asset ${index + 1} มี pictureId ไม่ถูกต้อง`);
+    if (label !== `Picture ${firstNewPictureNumber + index}`) {
+      errors.push(`asset ${index + 1} ต้องใช้ Picture ${firstNewPictureNumber + index}`);
+    }
+    if (existing.has(normalized)) errors.push(`${label} ซ้ำกับ reference ที่มีอยู่แล้ว`);
+    if (seen.has(normalized)) errors.push(`${label} ซ้ำใน assets`);
+    seen.add(normalized);
+    if (!["character", "location", "object"].includes(asset.assetType)) errors.push(`${label || `asset ${index + 1}`} มี assetType ไม่ถูกต้อง`);
+    if (!asset.prompt || !asset.negativePrompt) errors.push(`${label || `asset ${index + 1}`} ต้องมี prompt และ negativePrompt`);
+    if (!Array.isArray(asset.usedInShots)) errors.push(`${label || `asset ${index + 1}`} ต้องมี usedInShots`);
+    if (asset.assetType === "character") hasCharacter = true;
+    if (asset.assetType === "location") hasLocation = true;
+  });
+  if (!hasCharacter) errors.push("reference prompts ต้องมี character sheet อย่างน้อย 1 รายการ");
+  if (!hasLocation) errors.push("reference prompts ต้องมี location อย่างน้อย 1 รายการ");
+  return errors;
+}
+
+export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0, visualDirection, referenceAssets) {
   const errors = [];
   if (!value.trimStart().startsWith(`${prefix}subject_definitions:`)) {
     errors.push(`prompt ต้องเริ่มด้วย ${prefix}subject_definitions:`);
@@ -77,6 +117,13 @@ export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0
   }
   if (visualDirection?.mood && !value.toLocaleLowerCase().includes(visualDirection.mood.toLocaleLowerCase())) {
     errors.push(`prompt ไม่มี Mood: ${visualDirection.mood}`);
+  }
+  const pictureIds = [
+    ...(referenceAssets?.existingReferences || []).map((item) => item.pictureId),
+    ...(referenceAssets?.assets || []).map((item) => item.pictureId)
+  ].filter(Boolean);
+  for (const pictureId of pictureIds) {
+    if (!value.includes(`<${pictureId}>`)) errors.push(`prompt ไม่มี <${pictureId}> จาก reference assets`);
   }
   return errors;
 }

@@ -87,8 +87,28 @@ export function shotsPrompt(story, revision = "") {
 }\nเวลา shot แรกต้องเริ่ม 0, แต่ละ shot ต้องต่อกันโดยไม่มีช่องว่างหรือซ้อนกัน และ shot สุดท้ายต้องจบตรง durationSeconds`;
 }
 
-export function finalPrompt(story, shots, prefix = "DY,", visualDirection = story.visualDirection) {
-  return `สร้าง prompt ภาษาอังกฤษตามโครงสร้างตัวอย่างอย่างเคร่งครัด ข้อมูลทั้งหมดต้องมาจาก STORY, SHOTS และ VISUAL_DIRECTION เท่านั้น\n\nSTORY:\n${JSON.stringify(story, null, 2)}\nSHOTS:\n${JSON.stringify(shots, null, 2)}\nVISUAL_DIRECTION:\n${JSON.stringify(visualDirection, null, 2)}\n\nข้อกำหนด:\n- บรรทัดแรกต้องเริ่มด้วย ${prefix}subject_definitions:\n- ใช้หัวข้อตามลำดับ: subject_definitions, summary, retention_analysis, detailed_description, overall_soundscape, non_diegetic_music\n- กำหนดทุกตัวละครและสภาพแวดล้อมเป็น <Subject N> เท่านั้น แม้ Subject นั้นจะเป็นสถานที่ ห้ามใช้ <Environment N> หรือรูปแบบอื่น\n- หากมี reference ให้ใช้ <Picture N> ตามข้อมูลที่มีเท่านั้น\n- detailed_description ต้องแบ่ง [Shot N] และตั้งแต่ shot 2 เป็นต้นไป หัวบรรทัดต้องใช้รูปแบบ [Shot N] At 00:05.000 โดยคำนวณจาก startTime จริง ห้ามใช้เพียง (5s)\n- บทพูดใช้รูปแบบ <Subject N> (S1) ... <d>[English] dialogue</d> โดยเปลี่ยนภาษาตามข้อมูลจริง\n- retention_analysis ต้องระบุ shot ที่ subject ปรากฏและสิ่งที่ต้องรักษา\n- ต้องสะท้อน VISUAL_DIRECTION ทั้งรูปแบบภาพและ mood อย่างสม่ำเสมอใน subject_definitions, summary และทุก shot โดยระบุผลต่อรูปลักษณ์ตัวละคร ฉาก แสง สี เลนส์ กล้อง และการเคลื่อนไหวเท่าที่เกี่ยวข้อง\n- ห้ามสร้าง reference image ที่ผู้ใช้ไม่ได้ให้\n- ห้ามมี Markdown heading หรือ code fence\n- ส่งเฉพาะ prompt ฉบับสมบูรณ์`;
+export function referencePromptsPrompt(story, shots, existingReferences = [], revision = "") {
+  return `${STORY_FRAMEWORK}\n${jsonInstruction}\n\nสร้าง prompt ภาษาอังกฤษสำหรับ generate ภาพอ้างอิงที่จำเป็นต่อวิดีโอนี้ โดยสร้างเฉพาะตัวละคร สถานที่ และวัตถุสำคัญที่ปรากฏจริงใน STORY/SHOTS\nSTORY:\n${JSON.stringify(story, null, 2)}\nSHOTS:\n${JSON.stringify(shots, null, 2)}\nEXISTING_REFERENCES:\n${JSON.stringify(existingReferences, null, 2)}\nREVISION REQUEST:\n${revision || "ไม่มี"}\n\nใช้ schema นี้:\n{
+  "projectTitle":"string",
+  "globalStyle":{"visualDirection":"string","mood":"string","styleLock":"ข้อกำหนดที่ทุกภาพต้องใช้ร่วมกัน"},
+  "existingReferences":[{"pictureId":"Picture 1","description":"string"}],
+  "assets":[{
+    "pictureId":"Picture 2",
+    "assetType":"character|location|object",
+    "name":"string",
+    "linkedSubjects":["Subject 1"],
+    "usedInShots":[1],
+    "purpose":"string",
+    "prompt":"English image-generation prompt",
+    "negativePrompt":"English negative prompt",
+    "consistencyNotes":["string"]
+  }],
+  "usageGuide":["string"]
+}\nข้อกำหนด:\n- รักษา visualDirection, mood, ยุคสมัย, palette และระดับความสมจริงจาก STORY อย่างเคร่งครัด\n- existingReferences ต้องคง Picture ID ตามที่ได้รับ ห้ามสร้าง prompt ซ้ำให้ภาพที่มีอยู่แล้ว\n- assets ใหม่ต้องเริ่มหมายเลข Picture ต่อจาก existingReferences และห้ามซ้ำกัน\n- character: สร้าง character sheet บนพื้นหลังเรียบ มี full-body front, three-quarter, side, back, facial expressions, เสื้อผ้า และอุปกรณ์ประจำตัว โดยห้ามใส่ตัวละครอื่น\n- location: สร้าง environment reference ที่ไม่มีตัวละคร มี wide establishing view และรายละเอียดสถาปัตยกรรม แสง วัสดุ สี และจุดที่ใช้จัดฉาก\n- object: สร้างเฉพาะวัตถุสำคัญต่อการกระทำหรือ continuity แยกวัตถุบนพื้นหลังเรียบ พร้อมหลายมุมและรายละเอียดวัสดุ ห้ามสร้างวัตถุทั่วไปที่ไม่ต้องรักษารูปลักษณ์\n- prompt ทุกข้อเป็นภาษาอังกฤษ ใช้คำบรรยายเชิงภาพที่ generate ได้จริง และห้ามใส่ชื่อศิลปินที่ยังมีชีวิต\n- linkedSubjects และ usedInShots ต้องตรงกับ STORY/SHOTS\n- หากไม่มีวัตถุสำคัญ ไม่ต้องสร้าง assetType object`;
+}
+
+export function finalPrompt(story, shots, prefix = "DY,", visualDirection = story.visualDirection, referenceAssets = {}) {
+  return `สร้าง prompt ภาษาอังกฤษตามโครงสร้างตัวอย่างอย่างเคร่งครัด ข้อมูลทั้งหมดต้องมาจาก STORY, SHOTS, VISUAL_DIRECTION และ REFERENCE_ASSETS เท่านั้น\n\nSTORY:\n${JSON.stringify(story, null, 2)}\nSHOTS:\n${JSON.stringify(shots, null, 2)}\nVISUAL_DIRECTION:\n${JSON.stringify(visualDirection, null, 2)}\nREFERENCE_ASSETS:\n${JSON.stringify(referenceAssets, null, 2)}\n\nข้อกำหนด:\n- บรรทัดแรกต้องเริ่มด้วย ${prefix}subject_definitions:\n- ใช้หัวข้อตามลำดับ: subject_definitions, summary, retention_analysis, detailed_description, overall_soundscape, non_diegetic_music\n- กำหนดทุกตัวละครและสภาพแวดล้อมเป็น <Subject N> เท่านั้น แม้ Subject นั้นจะเป็นสถานที่ ห้ามใช้ <Environment N> หรือรูปแบบอื่น\n- ใช้ <Picture N> ทุกภาพตาม mapping ใน REFERENCE_ASSETS เพื่อกำหนดรูปลักษณ์ของตัวละคร สถานที่ และวัตถุ ห้ามสร้าง Picture ID อื่น\n- detailed_description ต้องแบ่ง [Shot N] และตั้งแต่ shot 2 เป็นต้นไป หัวบรรทัดต้องใช้รูปแบบ [Shot N] At 00:05.000 โดยคำนวณจาก startTime จริง ห้ามใช้เพียง (5s)\n- บทพูดใช้รูปแบบ <Subject N> (S1) ... <d>[English] dialogue</d> โดยเปลี่ยนภาษาตามข้อมูลจริง\n- retention_analysis ต้องระบุ shot ที่ subject และ reference image ปรากฏ รวมถึงสิ่งที่ต้องรักษา\n- ต้องสะท้อน VISUAL_DIRECTION ทั้งรูปแบบภาพและ mood อย่างสม่ำเสมอใน subject_definitions, summary และทุก shot โดยระบุผลต่อรูปลักษณ์ตัวละคร ฉาก แสง สี เลนส์ กล้อง และการเคลื่อนไหวเท่าที่เกี่ยวข้อง\n- ห้ามมี Markdown heading หรือ code fence\n- ส่งเฉพาะ prompt ฉบับสมบูรณ์`;
 }
 
 export const SYSTEM_PROMPT = "คุณเป็นนักวิเคราะห์บท ผู้กำกับ และผู้วาง shot list สำหรับวิดีโอสั้น ให้ความสำคัญกับความชัดเจน ความต่อเนื่อง ความเป็นไปได้ และเจตนาของผู้ใช้";

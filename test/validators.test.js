@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateFinalPrompt, validateShots } from "../src/validators.js";
+import { validateFinalPrompt, validateReferencePrompts, validateShots } from "../src/validators.js";
 
 test("accepts a contiguous shot list with exact total duration", () => {
   const value = {
@@ -38,4 +38,28 @@ test("rejects environment aliases and missing shot timestamps", () => {
 test("requires the selected visual direction and mood in the final prompt", () => {
   const prompt = `DY,subject_definitions:\n<Subject 1> is a room.\nsummary:\nAnime scene\nretention_analysis:\nC\ndetailed_description:\n[Shot 1] Start.\noverall_soundscape:\nE\nnon_diegetic_music:\nF`;
   assert.deepEqual(validateFinalPrompt(prompt, "DY,", 1, { label: "Anime", mood: "dreamy" }), ["prompt ไม่มี Mood: dreamy"]);
+});
+
+test("validates character and location reference prompts with unique picture IDs", () => {
+  const value = {
+    globalStyle: { visualDirection: "Anime" },
+    existingReferences: [{ pictureId: "Picture 1", description: "logo" }],
+    assets: [
+      { pictureId: "Picture 2", assetType: "character", prompt: "Character sheet", negativePrompt: "text", usedInShots: [1] },
+      { pictureId: "Picture 3", assetType: "location", prompt: "Empty location", negativePrompt: "people", usedInShots: [1] }
+    ]
+  };
+  assert.deepEqual(validateReferencePrompts(value, ["Picture 1"]), []);
+});
+
+test("rejects reference assets that reuse an existing Picture ID", () => {
+  const value = {
+    globalStyle: { visualDirection: "Anime" },
+    existingReferences: [{ pictureId: "Picture 1", description: "logo" }],
+    assets: [
+      { pictureId: "Picture 1", assetType: "character", prompt: "Character sheet", negativePrompt: "text", usedInShots: [1] },
+      { pictureId: "Picture 2", assetType: "location", prompt: "Empty location", negativePrompt: "people", usedInShots: [1] }
+    ]
+  };
+  assert.match(validateReferencePrompts(value, ["Picture 1"]).join("; "), /ซ้ำกับ reference/);
 });
