@@ -1,0 +1,79 @@
+DY,subject_definitions:
+<Subject 1>: A woman approximately 25-30 years old with short curly dark hair, hoop earrings, red lipstick, and a black spaghetti strap dress. She exhibits a calm, resolute demeanor that subtly conceals emotional pain.
+<Subject 2>: A man approximately 25-30 years old with dark wavy hair, wearing a black suit jacket over an open-collar white shirt. He displays a tense, uncomfortable, and quietly stunned demeanor.
+<Subject 3>: A nighttime restaurant interior, featuring a dining table situated next to a large glass window reflecting glowing outdoor streetlights and city bokeh. Illuminated by warm tungsten overhead lighting, establishing a cinematic realistic drama visual style with shallow depth of field and subtle film grain.
+
+summary:
+A tense, emotional 15-second interaction at a nighttime restaurant window table where a resolute woman (<Subject 1>) sits in quiet tension with her partner (<Subject 2>), calmly reaches for her coat, delivers a decisive breakup line, and walks away, leaving him alone in heavy silence.
+
+retention_analysis:
+- <Subject 1>: Appears in Shot 1, Shot 2, Shot 4, and Shot 5. Must retain short curly dark hair, hoop earrings, red lipstick, black spaghetti strap dress, and steady, calm composure across all shots.
+- <Subject 2>: Appears in Shot 1, Shot 3, and Shot 5. Must retain dark wavy hair, black suit jacket, open-collar white shirt, and sitting position on the right side of the table.
+- <Subject 3>: Appears in Shot 1, Shot 2, Shot 3, Shot 4, and Shot 5. Must retain the night restaurant setting, window table, warm tungsten lighting tone, and glass reflections with background streetlight bokeh throughout the scene.
+
+detailed_description:
+[Shot 1]
+- Objective: Establish immediate tension and awkward atmosphere through silence between two people.
+- Subjects: <Subject 1>, <Subject 2>, <Subject 3>
+- Setting: Table next to the glass window in <Subject 3> at night with reflected streetlights.
+- Action: <Subject 1> and <Subject 2> sit opposite each other across the table, maintaining eye contact in complete silence without speaking.
+- Camera: Over-the-shoulder medium shot looking past <Subject 2>'s left shoulder towards <Subject 1>.
+- Composition: <Subject 1> positioned at the right rule-of-thirds intersection, <Subject 2>'s shoulder forming the foreground on the left, glass window with streetlight bokeh in the background.
+- Lighting: Warm tungsten overhead light catching the side of <Subject 1>'s face.
+- Dialogue: None.
+- Sound: Soft ambient restaurant sound mixed with a heavy, tense silence.
+- Transition: Cut.
+
+[Shot 2] At 00:03.000
+- Objective: Heighten emotional pressure by showing <Subject 1>'s calm physical preparation to leave.
+- Subjects: <Subject 1>, <Subject 3>
+- Setting: Window table inside <Subject 3>.
+- Action: <Subject 1> maintains calm eye contact, then reaches down with her hand to grip her coat resting beside her, preparing to stand up.
+- Camera: Medium close-up focusing on <Subject 1>'s face and physical body language.
+- Composition: <Subject 1> centered with shallow depth of field, background softly blurred.
+- Lighting: Warm tungsten lighting emphasizing her eyes and red lipstick with a calm yet painful expression.
+- Dialogue: None.
+- Sound: Subtle rustling sound of coat fabric distinct in the silence.
+- Transition: Cut.
+
+[Shot 3] At 00:06.000
+- Objective: Reveal <Subject 2>'s quiet shock and realization of finality.
+- Subjects: <Subject 2>, <Subject 3>
+- Setting: Window table inside <Subject 3>.
+- Action: <Subject 2>'s expression turns increasingly tense; he swallows hard and stares back at <Subject 1> with uncomfortable realization.
+- Camera: Close-up capturing <Subject 2>'s facial reaction.
+- Composition: Framing <Subject 2>'s face slightly to the left, blurred glass window and streetlights in the background.
+- Lighting: Shadow cast across one side of his face to enhance dramatic tension.
+- Dialogue: None.
+- Sound: Faint soft exhale from <Subject 2>.
+- Transition: Cut.
+
+[Shot 4] At 00:09.000
+- Objective: Deliver the emotional climax through a calm, firm breakup line.
+- Subjects: <Subject 1>, <Subject 3>
+- Setting: Window table inside <Subject 3>.
+- Action: <Subject 1> looks <Subject 2> directly in the eyes and delivers the breakup line with steady composure and firm eyes, avoiding any frantic outburst.
+- Camera: Tight close-up on <Subject 1>'s face.
+- Composition: Frame tightly focused on <Subject 1>'s eyes and lips.
+- Lighting: Soft warm light glinting in her eyes, showing repressed pain.
+- Dialogue: <Subject 1> (S1) speaks: <d>[English] We should break up.</d>
+- Sound: Clear live dialogue spoken calmly without background music.
+- Transition: Cut.
+
+[Shot 5] At 00:12.000
+- Objective: Conclude with an emotional payoff, leaving solitude and quiet lingering.
+- Subjects: <Subject 1>, <Subject 2>, <Subject 3>
+- Setting: Window table inside <Subject 3>.
+- Action: <Subject 1> stands up, picks up her coat, and walks out of the frame to the left, leaving <Subject 2> sitting alone in silence at the table.
+- Camera: Wide shot covering the entire window table setup in <Subject 3>.
+- Composition: <Subject 2> sits on the right side of the frame; empty space on the left created by <Subject 1>'s exit emphasizes isolation.
+- Lighting: Warm tungsten lighting covering the table, glowing streetlights visible through the window.
+- Dialogue: None.
+- Sound: Soft chair scrape, receding footsteps walking away, returning to ambient restaurant noise.
+- Transition: Fade to black.
+
+overall_soundscape:
+Dominant soft ambient restaurant noise layered with heavy tense silence, punctuated by subtle diegetic sound effects including coat fabric movement, a faint exhale, clear isolated live dialogue ("We should break up"), chair movement, and receding footsteps.
+
+non_diegetic_music:
+None. Completely silent of musical soundtrack to preserve stark realism and emotional impact.

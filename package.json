@@ -1,0 +1,21 @@
+{
+  "name": "shot-analysis-cli",
+  "version": "0.1.0",
+  "description": "Interactive CLI for turning a video brief into an approved story, shot list, and generation prompt.",
+  "type": "module",
+  "bin": {
+    "shot-analysis": "./bin/shot-analysis.js"
+  },
+  "scripts": {
+    "start": "node ./bin/shot-analysis.js",
+    "test": "node --test",
+    "check": "node --check ./bin/shot-analysis.js && node --check ./src/cli.js && node --check ./src/workflow.js"
+  },
+  "engines": {
+    "node": ">=20.17"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@inquirer/prompts": "^8.7.4"
+  }
+}
