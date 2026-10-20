@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateFinalPrompt, validateReferencePrompts, validateShots } from "../src/validators.js";
+import { normalizeFinalPrompt, validateFinalPrompt, validateReferencePrompts, validateShots } from "../src/validators.js";
 
 test("accepts a contiguous shot list with exact total duration", () => {
   const value = {
@@ -38,6 +38,20 @@ test("rejects environment aliases and missing shot timestamps", () => {
 test("requires the selected visual direction and mood in the final prompt", () => {
   const prompt = `DY,subject_definitions:\n<Subject 1> is a room.\nsummary:\nAnime scene\nretention_analysis:\nC\ndetailed_description:\n[Shot 1] Start.\noverall_soundscape:\nE\nnon_diegetic_music:\nF`;
   assert.deepEqual(validateFinalPrompt(prompt, "DY,", 1, { label: "Anime", mood: "dreamy" }), ["prompt ไม่มี Mood: dreamy"]);
+});
+
+test("normalizes common model formatting around the final prompt", () => {
+  const raw = `Here is the prompt:\n\n\`\`\`text\nDY, subject_definitions: details\n## Summary: story\n**retention_analysis:** keep\ndetailed_description: [Shot 1]\noverall_soundscape: ambience\nnon_diegetic_music: score\n\`\`\``;
+  const normalized = normalizeFinalPrompt(raw, "DY,");
+  assert.ok(normalized.startsWith("DY,subject_definitions:"));
+  assert.match(normalized, /^summary:/m);
+  assert.match(normalized, /^retention_analysis:/m);
+  assert.deepEqual(validateFinalPrompt(normalized, "DY,", 1), []);
+});
+
+test("adds the configured prefix when the model starts at subject_definitions", () => {
+  const normalized = normalizeFinalPrompt("subject_definitions:\nA\nsummary:\nB", "TEST,");
+  assert.ok(normalized.startsWith("TEST,subject_definitions:"));
 });
 
 test("validates character and location reference prompts with unique picture IDs", () => {

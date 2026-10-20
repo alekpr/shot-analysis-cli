@@ -1,11 +1,11 @@
 import path from "node:path";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { extractJson, resolveOutputPath, slugify } from "./utils.js";
 import { analysisPrompt, finalPrompt, referencePromptsPrompt, shotsPrompt, storyPrompt, SYSTEM_PROMPT } from "./prompts.js";
 import { renderAnalysis, renderReferencePrompts, renderShots, renderStory } from "./render.js";
 import { selectStoryCores } from "./cores.js";
 import { resolveVisualDirection } from "./visual-direction.js";
-import { validateAnalysis, validateFinalPrompt, validateReferencePrompts, validateShots, validateStory } from "./validators.js";
+import { normalizeFinalPrompt, validateAnalysis, validateFinalPrompt, validateReferencePrompts, validateShots, validateStory } from "./validators.js";
 
 async function saveText(target, content) {
   await writeFile(target, content.endsWith("\n") ? content : `${content}\n`, "utf8");
@@ -17,12 +17,66 @@ async function saveState(folder, state) {
   await writeFile(path.join(hidden, "session.json"), `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
-async function loadState(folder) {
+async function containsSession(folder) {
+  try {
+    await access(path.join(folder, ".shot-analysis", "session.json"));
+    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+async function findSessionsBelow(folder, depth = 3) {
+  if (depth < 0) return [];
+  let entries;
+  try {
+    entries = await readdir(folder, { withFileTypes: true });
+  } catch (error) {
+    if (["ENOENT", "ENOTDIR", "EACCES"].includes(error.code)) return [];
+    throw error;
+  }
+  const sessions = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || [".git", ".shot-analysis", "node_modules"].includes(entry.name)) continue;
+    const child = path.join(folder, entry.name);
+    if (await containsSession(child)) sessions.push(child);
+    if (depth > 0) sessions.push(...await findSessionsBelow(child, depth - 1));
+  }
+  return sessions;
+}
+
+async function resolveSessionFolder(requestedFolder) {
+  const requested = path.resolve(requestedFolder);
+  if (await containsSession(requested)) return requested;
+
+  const descendants = [...new Set(await findSessionsBelow(requested))];
+  if (descendants.length === 1) {
+    console.log(`พบ session ในโฟลเดอร์ย่อย: ${descendants[0]}`);
+    return descendants[0];
+  }
+  if (descendants.length > 1) {
+    const choices = descendants.map((folder) => `- ${folder}`).join("\n");
+    throw new Error(`พบหลาย session ใต้ ${requested}\n${choices}\nระบุโฟลเดอร์โปรเจกต์ที่ต้องการ เช่น shot-analysis resume "${descendants[0]}"`);
+  }
+
+  let ancestor = path.dirname(requested);
+  while (ancestor !== path.dirname(ancestor)) {
+    if (await containsSession(ancestor)) {
+      console.log(`พบ session ในโฟลเดอร์แม่: ${ancestor}`);
+      return ancestor;
+    }
+    ancestor = path.dirname(ancestor);
+  }
+  throw new Error(`ไม่พบ session สำหรับ resume ใต้หรือเหนือ ${requested}\nกรุณาระบุโฟลเดอร์โปรเจกต์ที่มีไฟล์ .shot-analysis/session.json`);
+}
+
+async function loadState(requestedFolder) {
+  const folder = await resolveSessionFolder(requestedFolder);
   const target = path.join(folder, ".shot-analysis", "session.json");
   try {
-    return JSON.parse(await readFile(target, "utf8"));
+    return { state: JSON.parse(await readFile(target, "utf8")), folder };
   } catch (error) {
-    if (error.code === "ENOENT") throw new Error(`ไม่พบ session สำหรับ resume ที่ ${target}`);
     throw new Error(`อ่าน session ไม่สำเร็จ: ${error.message}`);
   }
 }
@@ -246,24 +300,26 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
 
   console.log("กำลังสร้าง generation prompt ฉบับสุดท้าย...");
   const prefix = settings.promptPrefix ?? "DY,";
-  let generated = await trackFailure(outputFolder, state, () => llm.generate({ system: SYSTEM_PROMPT, prompt: finalPrompt(story, shots, prefix, selectedVisualDirection, referencePrompts), temperature: 0.2 }));
+  let generated = normalizeFinalPrompt(await trackFailure(outputFolder, state, () => llm.generate({ system: SYSTEM_PROMPT, prompt: finalPrompt(story, shots, prefix, selectedVisualDirection, referencePrompts), temperature: 0.2 })), prefix);
   const expectedShotCount = shots.shots.length;
   let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts);
   if (errors.length) {
-    generated = await trackFailure(outputFolder, state, () => llm.generate({
+    generated = normalizeFinalPrompt(await trackFailure(outputFolder, state, () => llm.generate({
       system: SYSTEM_PROMPT,
-      prompt: `แก้ prompt ให้ผ่านข้อกำหนด: ${errors.join("; ")}\n\n${generated}`,
+      prompt: `แก้ prompt ให้ผ่านข้อกำหนด: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วยตัวอักษร ${prefix}subject_definitions: ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\n${generated}`,
       temperature: 0.1
-    }));
+    })), prefix);
     errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts);
   }
   if (errors.length) {
     const error = new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
+    await saveText(path.join(outputFolder, "05-generation-prompt.failed.txt"), generated);
     await saveFailure(outputFolder, state, error);
     throw error;
   }
   const promptFile = path.join(outputFolder, "05-generation-prompt.txt");
   await saveText(promptFile, generated.trim());
+  await rm(path.join(outputFolder, "05-generation-prompt.failed.txt"), { force: true });
   state.completedAt = new Date().toISOString();
   state.finalPromptFile = promptFile;
   await checkpoint(outputFolder, state, "complete");
@@ -271,8 +327,8 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
 }
 
 export async function runResumeWorkflow({ terminal, llm, folder = ".", settings }) {
-  const outputFolder = resolveOutputPath(folder);
-  const state = await loadState(outputFolder);
+  const requestedFolder = resolveOutputPath(folder);
+  const { state, folder: outputFolder } = await loadState(requestedFolder);
   state.outputFolder = outputFolder;
   state.provider = settings.provider;
   state.model = settings.model;
@@ -410,24 +466,28 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
     if (state.status === "generating-prompt") {
       console.log("กำลังสร้าง generation prompt ต่อจาก checkpoint...");
       const prefix = settings.promptPrefix ?? "DY,";
-      let generated = await llm.generate({
+      let generated = normalizeFinalPrompt(await llm.generate({
         system: SYSTEM_PROMPT,
         prompt: finalPrompt(state.story, state.shots, prefix, selectedVisualDirection, state.referencePrompts),
         temperature: 0.2
-      });
+      }), prefix);
       const expectedShotCount = state.shots.shots.length;
       let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts);
       if (errors.length) {
-        generated = await llm.generate({
+        generated = normalizeFinalPrompt(await llm.generate({
           system: SYSTEM_PROMPT,
-          prompt: `แก้ prompt ให้ผ่านข้อกำหนด: ${errors.join("; ")}\n\n${generated}`,
+          prompt: `แก้ prompt ให้ผ่านข้อกำหนด: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วยตัวอักษร ${prefix}subject_definitions: ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\n${generated}`,
           temperature: 0.1
-        });
+        }), prefix);
         errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts);
       }
-      if (errors.length) throw new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
+      if (errors.length) {
+        await saveText(path.join(outputFolder, "05-generation-prompt.failed.txt"), generated);
+        throw new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
+      }
       const promptFile = path.join(outputFolder, "05-generation-prompt.txt");
       await saveText(promptFile, generated.trim());
+      await rm(path.join(outputFolder, "05-generation-prompt.failed.txt"), { force: true });
       state.completedAt = new Date().toISOString();
       state.finalPromptFile = promptFile;
       await checkpoint(outputFolder, state, "complete");

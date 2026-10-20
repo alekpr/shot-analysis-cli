@@ -7,6 +7,34 @@ const REQUIRED_FINAL_SECTIONS = [
   "non_diegetic_music:"
 ];
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function normalizeFinalPrompt(value, prefix = "DY,") {
+  let normalized = String(value || "")
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .replace(/^```(?:text|plaintext|markdown)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
+
+  const escapedPrefix = escapeRegExp(prefix.trim());
+  const firstSection = new RegExp(`(?:${escapedPrefix}\\s*)?subject_definitions\\s*:`, "i");
+  const match = firstSection.exec(normalized);
+  if (match) {
+    normalized = normalized.slice(match.index);
+    normalized = normalized.replace(firstSection, `${prefix}subject_definitions:`);
+  }
+
+  for (const section of REQUIRED_FINAL_SECTIONS.slice(1)) {
+    const name = section.slice(0, -1);
+    const heading = new RegExp(`^\\s*(?:#{1,6}\\s*)?(?:\\*{1,2})?${name}(?:\\*{1,2})?\\s*:`, "gim");
+    normalized = normalized.replace(heading, `${section}`);
+  }
+  return normalized.trim();
+}
+
 export function validateAnalysis(value) {
   const errors = [];
   if (!value || typeof value !== "object") errors.push("analysis ต้องเป็น object");

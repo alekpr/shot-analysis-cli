@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { runNewWorkflow, runResumeWorkflow } from "../src/workflow.js";
 
 class FakeLlm {
@@ -205,4 +205,25 @@ test("resume continues from reference prompts without regenerating approved stag
   assert.equal(llm.calls.some((prompt) => prompt.includes("วิเคราะห์ brief")), false);
   assert.equal(llm.calls.some((prompt) => prompt.includes("สร้างโครงเรื่อง")), false);
   assert.equal(llm.calls.some((prompt) => prompt.includes("แตกโครงเรื่องเป็น shot list")), false);
+});
+
+test("resume discovers a single project session below the requested folder", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-discovery-test-"));
+  const project = path.join(root, "nested", "my-clip");
+  await mkdir(path.join(project, ".shot-analysis"), { recursive: true });
+  await writeFile(path.join(project, ".shot-analysis", "session.json"), JSON.stringify({
+    version: 1,
+    status: "complete",
+    input: { brief: "done" },
+    finalPromptFile: path.join(project, "04-generation-prompt.txt")
+  }));
+  const llm = { generate: async () => { throw new Error("LLM should not be called"); } };
+  const result = await runResumeWorkflow({
+    terminal: {},
+    llm,
+    folder: root,
+    settings: { provider: "gemini", model: "test", promptPrefix: "DY," }
+  });
+  assert.equal(result.status, "complete");
+  assert.equal(result.outputFolder, project);
 });

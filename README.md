@@ -81,6 +81,8 @@ shot-analysis resume ./my-clip
 
 ระบบจะอ่าน `.shot-analysis/session.json` แล้วกลับไปยังขั้น analysis, story, shot list, reference image prompts หรือ final prompt ที่ค้างอยู่ สามารถเปลี่ยน provider/model ใน `.env` หรือด้วย `shot-analysis config` ก่อน resume ได้
 
+สามารถระบุโฟลเดอร์แม่ได้ หากมี session เพียงโปรเจกต์เดียวในโฟลเดอร์ย่อย ระบบจะค้นหาให้โดยอัตโนมัติ หากมีหลายโปรเจกต์จะแสดงรายการเส้นทางที่พบเพื่อให้เลือกคำสั่งที่ถูกต้อง
+
 ## ไฟล์ความรู้
 
 - [แผนการพัฒนา](./docs/PLAN.md)
