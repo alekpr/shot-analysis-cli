@@ -1,6 +1,6 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import { loadConfig, loadRootEnv, PROVIDERS, saveConfig, validateConfig } from "./config.js";
+import { loadConfig, loadEnvFiles, PROVIDERS, saveConfig, validateConfig } from "./config.js";
 import { LlmClient } from "./llm.js";
 import { createTerminal } from "./terminal.js";
 import { parseArgs } from "./utils.js";
@@ -36,7 +36,7 @@ async function showStatus(folder = ".") {
 }
 
 export async function main(argv) {
-  loadRootEnv();
+  const envInfo = loadEnvFiles();
   const { command, args } = parseArgs(argv);
   if (["help", "--help", "-h"].includes(command)) {
     console.log(HELP);
@@ -54,7 +54,9 @@ export async function main(argv) {
     }
     if (command === "new") {
       const settings = validateConfig(await loadConfig());
-      const result = await runNewWorkflow({ terminal, llm: new LlmClient(settings), args, settings });
+      const llm = new LlmClient(settings, envInfo);
+      llm.assertConfigured();
+      const result = await runNewWorkflow({ terminal, llm, args, settings });
       console.log(`\nสถานะ: ${result.status}`);
       console.log(`เอกสารอยู่ที่: ${result.outputFolder}`);
       if (result.promptFile) console.log(`Prompt: ${result.promptFile}`);

@@ -30,7 +30,15 @@ DEEPSEEK_API_KEY=your_key_here
 
 เปลี่ยน `SHOT_ANALYSIS_PROVIDER` เป็น `gemini`, `anthropic` หรือ `deepseek` เพื่อเลือก provider ค่า model ของ provider นั้นจะถูกอ่านจากตัวแปร `*_MODEL` ที่ตรงกัน ค่าใน `.env` มีลำดับความสำคัญเหนือ settings ที่สร้างด้วยคำสั่ง `config`
 
-CLI โหลด `.env` ให้อัตโนมัติ และไฟล์นี้ถูกกันออกจาก Git แล้ว สามารถดูแม่แบบที่ [`.env.example`](./.env.example) หากตั้งค่าใน `.env` ครบ ไม่จำเป็นต้องรัน `shot-analysis config`
+CLI โหลด `.env` ให้อัตโนมัติตามลำดับต่อไปนี้ โดยค่าที่พบก่อนมีลำดับความสำคัญสูงกว่า:
+
+1. `.env` ที่ใกล้ที่สุดจากโฟลเดอร์ที่เรียกคำสั่งขึ้นไปยังโฟลเดอร์แม่
+2. `~/.config/shot-analysis-cli/.env` สำหรับใช้ร่วมกันทุกโปรเจกต์บนเครื่อง
+3. `.env` ใน root ของแพ็กเกจ เหมาะกับการติดตั้งแบบ `npm link`
+
+Environment variable ที่ export ไว้ใน shell มีลำดับความสำคัญสูงสุด ไฟล์ `.env` ในโปรเจกต์นี้ถูกกันออกจาก Git แล้ว และดูแม่แบบได้ที่ [`.env.example`](./.env.example) หากตั้งค่าใน `.env` ครบ ไม่จำเป็นต้องรัน `shot-analysis config`
+
+หากติดตั้ง CLI แบบ global ด้วย `npm install -g` แนะนำให้คัดลอก `.env.example` ไปเป็น `~/.config/shot-analysis-cli/.env` เพราะตัวจัดการแพ็กเกจจะไม่คัดลอก `.env` ส่วนตัวจาก repository ไปยัง global package
 
 ## เริ่มงานใหม่
 

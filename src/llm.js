@@ -1,7 +1,9 @@
-function requireApiKey(settings) {
+export function requireApiKey(settings, envInfo = {}) {
   const value = process.env[settings.apiKeyEnv];
   if (!value) {
-    throw new Error(`ไม่พบ API key ใน environment variable ${settings.apiKeyEnv}`);
+    const locations = envInfo.searched?.length ? `\nตำแหน่ง .env ที่ตรวจ: ${envInfo.searched.join(", ")}` : "";
+    const loaded = envInfo.loaded?.length ? `\nไฟล์ .env ที่โหลดได้: ${envInfo.loaded.join(", ")}` : "";
+    throw new Error(`ไม่พบ API key สำหรับ ${settings.provider} ใน environment variable ${settings.apiKeyEnv}${loaded}${locations}\nเพิ่ม ${settings.apiKeyEnv}=... ใน .env หรือ export ตัวแปรนี้ก่อนใช้งาน`);
   }
   return value;
 }
@@ -17,12 +19,17 @@ async function requestJson(url, options) {
 }
 
 export class LlmClient {
-  constructor(settings) {
+  constructor(settings, envInfo = {}) {
     this.settings = settings;
+    this.envInfo = envInfo;
+  }
+
+  assertConfigured() {
+    requireApiKey(this.settings, this.envInfo);
   }
 
   async generate({ system, prompt, json = false, temperature = 0.3 }) {
-    const apiKey = requireApiKey(this.settings);
+    const apiKey = requireApiKey(this.settings, this.envInfo);
     if (this.settings.provider === "gemini") {
       return this.#gemini({ apiKey, system, prompt, json, temperature });
     }

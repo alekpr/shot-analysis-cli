@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
@@ -24,21 +25,44 @@ export const PROVIDERS = {
   }
 };
 
-export function loadRootEnv() {
-  const sourceDirectory = path.dirname(fileURLToPath(import.meta.url));
-  const envFile = path.resolve(sourceDirectory, "..", ".env");
-  try {
-    process.loadEnvFile(envFile);
-  } catch (error) {
-    if (error.code !== "ENOENT") {
-      throw new Error(`โหลด .env ไม่สำเร็จ: ${error.message}`);
-    }
+function nearestEnvFile(startDirectory) {
+  let directory = path.resolve(startDirectory);
+  while (true) {
+    const candidate = path.join(directory, ".env");
+    if (existsSync(candidate)) return candidate;
+    const parent = path.dirname(directory);
+    if (parent === directory) return null;
+    directory = parent;
   }
 }
 
 export function configPath() {
   const base = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
   return path.join(base, "shot-analysis-cli", "settings.json");
+}
+
+export function loadEnvFiles({
+  cwd = process.cwd(),
+  packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."),
+  configDirectory = path.dirname(configPath())
+} = {}) {
+  const candidates = [
+    nearestEnvFile(cwd),
+    path.join(configDirectory, ".env"),
+    path.join(packageRoot, ".env")
+  ].filter(Boolean);
+  const searched = [...new Set(candidates)];
+  const loaded = [];
+
+  for (const envFile of searched) {
+    try {
+      process.loadEnvFile(envFile);
+      loaded.push(envFile);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw new Error(`โหลด .env ไม่สำเร็จที่ ${envFile}: ${error.message}`);
+    }
+  }
+  return { loaded, searched };
 }
 
 export function resolveConfig(storedConfig, environment = process.env) {
@@ -50,11 +74,14 @@ export function resolveConfig(storedConfig, environment = process.env) {
 
   const sameStoredProvider = storedConfig?.provider === provider;
   const stored = sameStoredProvider ? storedConfig : {};
+  const defaultKeyIsAvailable = Boolean(environment[providerDefinition.defaultApiKeyEnv]);
   return {
     ...stored,
     provider,
     model: environment[providerDefinition.modelEnv] || stored.model || providerDefinition.defaultModel,
-    apiKeyEnv: stored.apiKeyEnv || providerDefinition.defaultApiKeyEnv,
+    apiKeyEnv: environment.SHOT_ANALYSIS_API_KEY_ENV
+      || (defaultKeyIsAvailable ? providerDefinition.defaultApiKeyEnv : stored.apiKeyEnv)
+      || providerDefinition.defaultApiKeyEnv,
     promptPrefix: environment.SHOT_ANALYSIS_PROMPT_PREFIX ?? stored.promptPrefix ?? "DY,"
   };
 }
