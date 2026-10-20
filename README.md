@@ -1,97 +1,323 @@
 # shot-analysis-cli
 
-CLI สำหรับเปลี่ยน brief ของคลิปให้เป็นโครงเรื่อง, shot list และ generation prompt ที่ผู้ใช้ตรวจและอนุมัติทีละขั้น รองรับ Gemini, Claude และ DeepSeek
+CLI สำหรับเปลี่ยน brief ของคลิปให้เป็นโครงเรื่อง, shot list, prompt สำหรับสร้างภาพอ้างอิง และ generation prompt ฉบับสุดท้าย ผู้ใช้สามารถตรวจ อนุมัติ หรือขอแก้ไขผลลัพธ์ในแต่ละขั้นได้ รองรับ Google Gemini, Anthropic Claude และ DeepSeek
+
+## ความสามารถ
+
+- รับ brief จากการพิมพ์ใน Terminal หรือไฟล์ข้อความ
+- วิเคราะห์ข้อมูลที่ขาดและถามผู้ใช้เพิ่มเติม
+- เลือกรูปแบบภาพ เช่น Cinematic, Anime, 3D, Illustration, Documentary และ Commercial
+- กำหนด mood และเลือก Core หลักของเรื่องผ่านรายการใน CLI
+- สร้างและตรวจโครงเรื่องกับ shot list ก่อนสร้าง prompt
+- สร้าง prompt สำหรับ Character sheets, Locations และ Objects พร้อม Picture ID
+- บันทึก checkpoint และทำงานต่อด้วย `resume` เมื่อหยุดหรือเกิดข้อผิดพลาด
+- ตั้ง provider, model และ API key ผ่าน `.env` หรือคำสั่ง `config`
 
 ## ความต้องการ
 
 - Node.js 20.17 ขึ้นไป
-- API key ของ provider ที่เลือก
+- API key ของ provider ที่ต้องการใช้
+- อินเทอร์เน็ตสำหรับเรียก LLM API
 
-## ติดตั้งในเครื่อง
+ตรวจสอบ Node.js:
 
 ```bash
-npm link
-shot-analysis config
+node --version
+npm --version
 ```
 
-CLI จะเก็บเฉพาะชื่อ provider, model และชื่อ environment variable ที่ `~/.config/shot-analysis-cli/settings.json` ส่วน API key ใส่ได้ในไฟล์ `.env` ที่ root ของโปรเจกต์:
+## ติดตั้ง
+
+Clone repository และติดตั้ง dependencies:
 
 ```bash
+git clone https://github.com/alekpr/shot-analysis-cli.git
+cd shot-analysis-cli
+npm install
+npm link
+```
+
+หลัง `npm link` สามารถเรียกคำสั่ง `shot-analysis` ได้จากทุกโฟลเดอร์ในเครื่อง:
+
+```bash
+shot-analysis --help
+```
+
+หากไม่ต้องการ `npm link` ให้เรียกผ่าน npm ภายใน repository:
+
+```bash
+npm start -- --help
+npm start -- new
+```
+
+## Quick start
+
+1. สร้าง `.env` จากไฟล์ตัวอย่าง
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. ใส่ provider, model และ API key ที่ต้องการใน `.env`
+
+   ```dotenv
+   SHOT_ANALYSIS_PROVIDER=gemini
+   GEMINI_MODEL=gemini-3.5-flash
+   GEMINI_API_KEY=your_key_here
+   ```
+
+3. เริ่มสร้างโปรเจกต์
+
+   ```bash
+   shot-analysis new
+   ```
+
+4. ตรวจเอกสารที่ CLI สร้าง แล้วเลือกอนุมัติ ขอแก้ไข หรือหยุดไว้เพื่อกลับมาทำต่อ
+
+## ตั้งค่า LLM
+
+### ตั้งค่าผ่าน `.env`
+
+ตัวอย่างที่รองรับทุก provider:
+
+```dotenv
 SHOT_ANALYSIS_PROVIDER=gemini
 
 GEMINI_MODEL=gemini-3.5-flash
 ANTHROPIC_MODEL=claude-sonnet-5-5
 DEEPSEEK_MODEL=deepseek-chat
 
-GEMINI_API_KEY=your_key_here
-ANTHROPIC_API_KEY=your_key_here
-DEEPSEEK_API_KEY=your_key_here
+SHOT_ANALYSIS_PROMPT_PREFIX=DY,
+
+GEMINI_API_KEY=your_gemini_key
+ANTHROPIC_API_KEY=your_anthropic_key
+DEEPSEEK_API_KEY=your_deepseek_key
 ```
 
-เปลี่ยน `SHOT_ANALYSIS_PROVIDER` เป็น `gemini`, `anthropic` หรือ `deepseek` เพื่อเลือก provider ค่า model ของ provider นั้นจะถูกอ่านจากตัวแปร `*_MODEL` ที่ตรงกัน ค่าใน `.env` มีลำดับความสำคัญเหนือ settings ที่สร้างด้วยคำสั่ง `config`
+เปลี่ยน `SHOT_ANALYSIS_PROVIDER` เป็นค่าต่อไปนี้:
 
-CLI โหลด `.env` ให้อัตโนมัติตามลำดับต่อไปนี้ โดยค่าที่พบก่อนมีลำดับความสำคัญสูงกว่า:
+| Provider | ค่าใน `.env` | ตัวแปร model | ตัวแปร API key |
+| --- | --- | --- | --- |
+| Google Gemini | `gemini` | `GEMINI_MODEL` | `GEMINI_API_KEY` |
+| Anthropic Claude | `anthropic` | `ANTHROPIC_MODEL` | `ANTHROPIC_API_KEY` |
+| DeepSeek | `deepseek` | `DEEPSEEK_MODEL` | `DEEPSEEK_API_KEY` |
 
-1. `.env` ที่ใกล้ที่สุดจากโฟลเดอร์ที่เรียกคำสั่งขึ้นไปยังโฟลเดอร์แม่
+ใส่เฉพาะ API key ที่ใช้งานจริงได้ ไม่ต้องใส่ครบทุก provider และไม่ควร commit `.env` ขึ้น Git
+
+CLI ค้นหา `.env` ตามลำดับนี้ โดยค่าที่พบก่อนมีลำดับความสำคัญสูงกว่า:
+
+1. `.env` ที่ใกล้ที่สุด เริ่มจากโฟลเดอร์ที่เรียกคำสั่งแล้วย้อนขึ้นไปยังโฟลเดอร์แม่
 2. `~/.config/shot-analysis-cli/.env` สำหรับใช้ร่วมกันทุกโปรเจกต์บนเครื่อง
-3. `.env` ใน root ของแพ็กเกจ เหมาะกับการติดตั้งแบบ `npm link`
+3. `.env` ใน root ของแพ็กเกจ เหมาะกับการติดตั้งด้วย `npm link`
 
-Environment variable ที่ export ไว้ใน shell มีลำดับความสำคัญสูงสุด ไฟล์ `.env` ในโปรเจกต์นี้ถูกกันออกจาก Git แล้ว และดูแม่แบบได้ที่ [`.env.example`](./.env.example) หากตั้งค่าใน `.env` ครบ ไม่จำเป็นต้องรัน `shot-analysis config`
+Environment variable ที่ `export` ไว้ใน shell มีลำดับความสำคัญสูงสุด ส่วนค่าจาก `.env` มีลำดับความสำคัญเหนือ settings ที่สร้างด้วย `shot-analysis config`
 
-หากติดตั้ง CLI แบบ global ด้วย `npm install -g` แนะนำให้คัดลอก `.env.example` ไปเป็น `~/.config/shot-analysis-cli/.env` เพราะตัวจัดการแพ็กเกจจะไม่คัดลอก `.env` ส่วนตัวจาก repository ไปยัง global package
+หากติดตั้ง CLI แบบ global หรือใช้งานจากหลายโฟลเดอร์ แนะนำให้เก็บค่าไว้ที่:
 
-## เริ่มงานใหม่
+```text
+~/.config/shot-analysis-cli/.env
+```
+
+### ตั้งค่าผ่าน CLI
+
+```bash
+shot-analysis config
+```
+
+ระบบจะถาม provider, model, ชื่อ environment variable ที่เก็บ API key, prompt prefix และ custom API base URL จากนั้นบันทึก settings ที่:
+
+```text
+~/.config/shot-analysis-cli/settings.json
+```
+
+คำสั่งนี้เก็บเฉพาะการตั้งค่าและชื่อ environment variable โดยไม่เก็บ API key จริง จึงยังต้องใส่ API key ใน `.env` หรือ `export` ใน shell เช่น:
+
+```bash
+export GEMINI_API_KEY="your_key_here"
+```
+
+หากกำหนด `.env` ครบแล้ว ไม่จำเป็นต้องรัน `shot-analysis config`
+
+## เริ่มโปรเจกต์ใหม่
 
 ```bash
 shot-analysis new
 ```
 
-อ่าน brief จากไฟล์และกำหนดโฟลเดอร์ผลลัพธ์ได้:
+ระบบจะถามว่าต้องการพิมพ์ brief หรืออ่านจากไฟล์
 
-```bash
-shot-analysis new --brief ./idea.md --output ./my-clip
+### พิมพ์ brief ใน Terminal
+
+เลือก `พิมพ์หรือวางข้อความใน Terminal` จากนั้นพิมพ์ brief ได้หลายบรรทัด เมื่อจบให้พิมพ์ `.done` ในบรรทัดใหม่แล้วกด Enter:
+
+```text
+> คลิปสั้นเกี่ยวกับนักเดินทางที่กลับบ้านหลังจากหายไปหลายปี
+  บรรยากาศอบอุ่นแบบภาพยนตร์ ความยาว 30 วินาที
+  .done
 ```
 
-หากไม่ใส่ `--brief` ระบบจะถามว่าจะพิมพ์ brief หรืออ่านจากไฟล์ สามารถลากไฟล์จาก Finder มาวางใน Terminal ได้ รองรับ `.txt`, `.md`, `.json`, `.yaml` และไฟล์ข้อความ UTF-8 ขนาดไม่เกิน 5 MB นอกจากนี้ยังใช้ `--brief-file` แทน `--brief` ได้
+### อ่าน brief จากไฟล์
 
-ขั้นตอน interactive จะทำงานตามลำดับ:
+เลือก `อ่านจากไฟล์ข้อความ` แล้วระบุ path หรือใช้ option โดยตรง:
 
-1. รับ brief และข้อมูลพื้นฐาน
-2. วิเคราะห์และถามข้อมูลที่จำเป็นเพิ่มเติม
-3. หาก brief ไม่ได้ระบุรูปแบบภาพ ระบบจะให้เลือก Cinematic, Anime, 3D, Illustration, Documentary, Commercial หรือกำหนดเอง พร้อมระบุ mood เพิ่มเติม
-4. แสดงรายการ Core แบบ checkbox ให้เลือก 1–3 รายการ แล้วกำหนด Primary Core
-5. สร้าง `02-story.md` ให้ผู้ใช้อนุมัติหรือขอแก้ไข
-6. สร้าง `03-shots.md` และตรวจเวลา/continuity
-7. สร้าง `04-reference-image-prompts.md` สำหรับ Character sheets, Locations และ Objects พร้อม Picture ID แล้วให้ผู้ใช้อนุมัติหรือขอแก้ไข
-8. สร้าง `05-generation-prompt.txt` ซึ่งใช้ Picture ID, รูปแบบภาพ และ mood ที่อนุมัติแล้ว
+```bash
+shot-analysis new --brief ./brief.md
+```
+
+`--brief-file` เป็นชื่อเรียกอีกแบบของ `--brief`:
+
+```bash
+shot-analysis new --brief-file ./brief.txt
+```
+
+กำหนดไฟล์ brief และโฟลเดอร์ผลลัพธ์พร้อมกัน:
+
+```bash
+shot-analysis new --brief ./briefs/restaurant.md --output ./projects/restaurant-clip
+```
+
+Path ที่มีช่องว่างควรครอบด้วย quote:
+
+```bash
+shot-analysis new --brief "~/Desktop/My Clip Brief.md"
+```
+
+บน macOS สามารถลากไฟล์จาก Finder มาวางที่ช่อง path ใน Terminal ได้ ระบบรองรับ `~`, quote และ path ที่ escape ช่องว่างด้วย `\` เช่น `My\ Clip.md`
+
+ไฟล์ brief ต้องเป็นไฟล์ข้อความ UTF-8 ที่มีขนาดไม่เกิน 5 MB เช่น `.txt`, `.md`, `.json` หรือ `.yaml` ชื่อไฟล์จะถูกใช้เป็นชื่อโปรเจกต์เริ่มต้น และ path ต้นทางจะถูกบันทึกใน `00-brief.md` กับ session
+
+## ขั้นตอนการทำงาน
+
+CLI จะทำงานตามลำดับดังนี้:
+
+1. รับ brief ชื่อโปรเจกต์ ความยาวคลิป แพลตฟอร์ม อัตราส่วนภาพ และภาพอ้างอิงที่มี
+2. วิเคราะห์ brief และถามข้อมูลสำคัญที่ยังขาด โดยถามซ้ำได้สูงสุด 3 รอบ
+3. เลือกรูปแบบภาพและ mood หาก brief ยังไม่ได้ระบุ
+4. เลือก Core 1–3 รายการและกำหนด Primary Core
+5. สร้างโครงเรื่องให้ตรวจและอนุมัติ
+6. สร้าง shot list พร้อมตรวจเวลาและ continuity
+7. สร้าง prompt สำหรับ Character sheets, Locations และ Objects พร้อม Picture ID
+8. สร้าง generation prompt ฉบับสุดท้ายจากข้อมูลที่อนุมัติแล้ว
 
 ในหน้าเลือก Core ใช้ปุ่มลูกศรขึ้น/ลงเพื่อเลื่อน, `Space` เพื่อเลือกหรือยกเลิก และ `Enter` เพื่อยืนยัน รายการที่ LLM แนะนำจะแสดงด้านบนพร้อมเครื่องหมาย `★ แนะนำ` และสามารถเลือก `กำหนด Core เอง` ได้
 
+เมื่อระบบสร้างเอกสารสำหรับ review จะมีตัวเลือก:
+
+- `อนุมัติ` เพื่อไปขั้นถัดไป
+- `ขอแก้ไข` เพื่อระบุรายละเอียดให้ LLM สร้างเอกสารใหม่
+- `หยุดและบันทึกไว้` เพื่อเก็บ checkpoint แล้วกลับมาทำต่อภายหลัง
+
+ระบบอนุญาตให้ขอแก้เอกสารแต่ละขั้นได้สูงสุด 6 รอบ
+
+## ไฟล์ผลลัพธ์
+
+ไฟล์จะถูกสร้างในโฟลเดอร์ที่เลือก:
+
+| ไฟล์ | เนื้อหา |
+| --- | --- |
+| `00-brief.md` | Brief และข้อมูลพื้นฐานของคลิป |
+| `01-analysis.md` | ผลวิเคราะห์ ข้อมูลภาพ mood และ Core ที่เลือก |
+| `02-story.md` | โครงเรื่องที่ผ่านขั้น review |
+| `03-shots.md` | Shot list เวลา มุมกล้อง เสียง และ continuity |
+| `04-reference-image-prompts.md` | Prompt สำหรับ Character, Location และ Object references |
+| `05-generation-prompt.txt` | Generation prompt ฉบับสุดท้าย |
+| `.shot-analysis/session.json` | สถานะและข้อมูล checkpoint สำหรับ `status` และ `resume` |
+
+หาก generation prompt ไม่ผ่าน validation ระบบอาจเก็บคำตอบล่าสุดไว้ที่ `05-generation-prompt.failed.txt` เพื่อช่วยตรวจสอบปัญหา
+
 ## ดูสถานะ
 
+ระบุโฟลเดอร์โปรเจกต์ที่มี `.shot-analysis/session.json`:
+
 ```bash
-shot-analysis status ./my-clip
+shot-analysis status ./projects/restaurant-clip
 ```
+
+ข้อมูลที่แสดงประกอบด้วยชื่อโปรเจกต์ สถานะ provider/model โฟลเดอร์ผลลัพธ์ และ error ล่าสุดถ้ามี
 
 ## ทำงานต่อจาก checkpoint
 
-หากการเรียก LLM ล้มเหลว อินเทอร์เน็ตหลุด หรือผู้ใช้เลือกหยุดไว้ สามารถทำต่อจากขั้นล่าสุดได้โดยไม่สร้างขั้นที่อนุมัติแล้วซ้ำ:
+หากหยุดไว้ การเรียก LLM ล้มเหลว หรืออินเทอร์เน็ตหลุด ให้ทำงานต่อจากขั้นล่าสุดด้วย:
 
 ```bash
-shot-analysis resume ./my-clip
+shot-analysis resume ./projects/restaurant-clip
 ```
 
-ระบบจะอ่าน `.shot-analysis/session.json` แล้วกลับไปยังขั้น analysis, story, shot list, reference image prompts หรือ final prompt ที่ค้างอยู่ สามารถเปลี่ยน provider/model ใน `.env` หรือด้วย `shot-analysis config` ก่อน resume ได้
+ระบบจะอ่าน `.shot-analysis/session.json` และทำต่อจากขั้น analysis, story, shot list, reference image prompts หรือ final prompt โดยไม่สร้างขั้นที่ผ่านการอนุมัติแล้วซ้ำ
 
-สามารถระบุโฟลเดอร์แม่ได้ หากมี session เพียงโปรเจกต์เดียวในโฟลเดอร์ย่อย ระบบจะค้นหาให้โดยอัตโนมัติ หากมีหลายโปรเจกต์จะแสดงรายการเส้นทางที่พบเพื่อให้เลือกคำสั่งที่ถูกต้อง
+สามารถเปลี่ยน provider หรือ model ใน `.env` หรือด้วย `shot-analysis config` ก่อน resume ได้ หากระบุโฟลเดอร์แม่และพบ session เพียงโปรเจกต์เดียวในโฟลเดอร์ย่อย ระบบจะค้นหาให้โดยอัตโนมัติ หากพบหลาย session ระบบจะแสดง path ที่พบเพื่อให้ระบุโปรเจกต์โดยตรง
 
-## ไฟล์ความรู้
-
-- [แผนการพัฒนา](./docs/PLAN.md)
-
-## ตรวจสอบโค้ด
+Session อยู่ในโฟลเดอร์ผลลัพธ์ของแต่ละโปรเจกต์ หากย้ายงานไปอีกเครื่อง ต้องคัดลอกทั้งโฟลเดอร์โปรเจกต์ รวมถึงโฟลเดอร์ซ่อน `.shot-analysis`:
 
 ```bash
+cp -R ./projects/restaurant-clip /path/on/another-machine/
+```
+
+## สรุปคำสั่ง
+
+| คำสั่ง | การใช้งาน |
+| --- | --- |
+| `shot-analysis --help` | แสดงคู่มือคำสั่งแบบย่อ |
+| `shot-analysis config` | ตั้งค่า provider และ model แบบ interactive |
+| `shot-analysis new` | เริ่มโปรเจกต์ใหม่ |
+| `shot-analysis new --brief FILE` | เริ่มโปรเจกต์จากไฟล์ brief |
+| `shot-analysis new --brief FILE --output DIR` | ระบุไฟล์ brief และโฟลเดอร์ผลลัพธ์ |
+| `shot-analysis status DIR` | ดูสถานะ session ของโปรเจกต์ |
+| `shot-analysis resume DIR` | ทำงานต่อจาก checkpoint |
+
+## แก้ปัญหาเบื้องต้น
+
+### ไม่พบ API key ใน environment variable
+
+ตรวจว่าชื่อ provider และตัวแปร API key ตรงกัน เช่น:
+
+```dotenv
+SHOT_ANALYSIS_PROVIDER=gemini
+GEMINI_API_KEY=your_key_here
+```
+
+ตรวจว่ากำลังเรียกคำสั่งจากโฟลเดอร์ที่ CLI สามารถค้นพบ `.env` ได้ หรือย้าย `.env` ไปไว้ที่ `~/.config/shot-analysis-cli/.env` เมื่อต้องการใช้ร่วมกันทุกโปรเจกต์ ห้ามใส่ quote รอบชื่อ environment variable และไม่ควรมีช่องว่างก่อนชื่อ key
+
+### ไม่พบ session สำหรับ resume
+
+ตรวจว่า path ที่ระบุคือโฟลเดอร์ผลลัพธ์ และมีไฟล์นี้อยู่:
+
+```text
+<project>/.shot-analysis/session.json
+```
+
+บน macOS ใช้คำสั่งนี้เพื่อตรวจไฟล์ซ่อน:
+
+```bash
+ls -la ./projects/restaurant-clip/.shot-analysis
+```
+
+หากคัดลอกโปรเจกต์มาจากเครื่องอื่น ต้องคัดลอก `.shot-analysis` มาด้วย
+
+### ไม่พบไฟล์ brief
+
+ตรวจ path ด้วย:
+
+```bash
+ls -l "$HOME/Desktop/My Clip Brief.md"
+```
+
+หาก path มีช่องว่าง ให้ครอบด้วย quote หรือลากไฟล์จาก Finder มาวางใน Terminal
+
+### Generation prompt ไม่ผ่านการตรวจ
+
+CLI จะพยายามแก้รูปแบบคำตอบจาก LLM ให้อัตโนมัติหนึ่งครั้ง หากยังไม่ผ่าน ระบบจะบันทึก checkpoint และไฟล์ `05-generation-prompt.failed.txt` จากนั้นสามารถเปลี่ยน model หรือ provider แล้วเรียก `shot-analysis resume <project-folder>` ได้
+
+## พัฒนาและตรวจสอบโค้ด
+
+```bash
+npm install
 npm run check
 npm test
+npm pack --dry-run
 ```
+
+## เอกสารเพิ่มเติม
+
+- [แผนการพัฒนา](./docs/PLAN.md)
+- [ตัวอย่าง Environment variables](./.env.example)
