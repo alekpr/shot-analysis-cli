@@ -8,7 +8,7 @@ CLI สำหรับเปลี่ยน brief ของคลิปให้
 - วิเคราะห์ข้อมูลที่ขาดและถามผู้ใช้เพิ่มเติม
 - เลือกรูปแบบภาพ เช่น Cinematic, Anime, 3D, Illustration, Documentary และ Commercial
 - กำหนด mood และเลือก Core หลักของเรื่องผ่านรายการใน CLI
-- สร้างและตรวจโครงเรื่องกับ shot list ก่อนสร้าง prompt
+- สร้างและตรวจโครงเรื่องกับ production shot list ที่ระบุ geography, action beats, กล้อง, เสียง และ continuity ก่อนสร้าง prompt
 - สร้าง prompt สำหรับ Character sheets, Locations และ Objects พร้อม Picture ID
 - บันทึก checkpoint และทำงานต่อด้วย `resume` เมื่อหยุดหรือเกิดข้อผิดพลาด
 - ตั้ง provider, model และ API key ผ่าน `.env` หรือคำสั่ง `config`
@@ -218,7 +218,7 @@ CLI จะทำงานตามลำดับดังนี้:
 | `00-brief.md` | Brief และข้อมูลพื้นฐานของคลิป |
 | `01-analysis.md` | ผลวิเคราะห์ ข้อมูลภาพ mood และ Core ที่เลือก |
 | `02-story.md` | โครงเรื่องที่ผ่านขั้น review |
-| `03-shots.md` | Shot list เวลา มุมกล้อง เสียง และ continuity |
+| `03-shots.md` | Production shot list พร้อม beat, geography, state, action, กล้อง, เสียง และ continuity |
 | `04-reference-image-prompts.md` | Prompt สำหรับ Character, Location และ Object references |
 | `05-generation-prompt.txt` | Generation prompt ฉบับสุดท้าย |
 | `.shot-analysis/session.json` | สถานะและข้อมูล checkpoint สำหรับ `status` และ `resume` |
@@ -320,4 +320,5 @@ npm pack --dry-run
 ## เอกสารเพิ่มเติม
 
 - [แผนการพัฒนา](./docs/PLAN.md)
+- [หลักการสร้าง Production Shot List](./docs/SHOT-LIST-GUIDE.md)
 - [ตัวอย่าง Environment variables](./.env.example)

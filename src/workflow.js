@@ -266,13 +266,13 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
   if (!storyApproved) return { outputFolder, status: state.status };
 
   console.log("กำลังแตกโครงเรื่องเป็น shot list...");
-  let shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story), validateShots, "shot list"));
+  let shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story), (value) => validateShots(value, story.durationSeconds), "shot list"));
   const shotsFile = path.join(outputFolder, "03-shots.md");
   await saveText(shotsFile, renderShots(shots));
   state.shots = shots;
   await checkpoint(outputFolder, state, "shots-review");
   const shotsApproved = await reviewDocument(terminal, "shot list", shotsFile, async (notes) => {
-    shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story, notes), validateShots, "shot list"));
+    shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story, notes), (value) => validateShots(value, story.durationSeconds), "shot list"));
     await saveText(shotsFile, renderShots(shots));
     state.shots = shots;
     await checkpoint(outputFolder, state, "shots-review");
@@ -425,13 +425,13 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
       const shotsFile = path.join(outputFolder, "03-shots.md");
       if (!shots) {
         console.log("กำลังสร้าง shot list ต่อ...");
-        shots = await generateJson(llm, shotsPrompt(state.story), validateShots, "shot list");
+        shots = await generateJson(llm, shotsPrompt(state.story), (value) => validateShots(value, state.story.durationSeconds), "shot list");
         state.shots = shots;
         await saveText(shotsFile, renderShots(shots));
         await checkpoint(outputFolder, state, "shots-review");
       }
       const approved = await reviewDocument(terminal, "shot list", shotsFile, async (notes) => {
-        shots = await generateJson(llm, shotsPrompt(state.story, notes), validateShots, "shot list");
+        shots = await generateJson(llm, shotsPrompt(state.story, notes), (value) => validateShots(value, state.story.durationSeconds), "shot list");
         state.shots = shots;
         await saveText(shotsFile, renderShots(shots));
         await checkpoint(outputFolder, state, "shots-review");

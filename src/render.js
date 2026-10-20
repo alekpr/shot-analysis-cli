@@ -26,7 +26,24 @@ export function renderShots(value) {
     const dialogue = shot.dialogue?.length
       ? shot.dialogue.map((line) => `- ${line.speaker} [${line.language}]: “${line.line}” (${line.performance})`).join("\n")
       : "- ไม่มีบทพูด";
-    return `## Shot ${shot.number} — ${secondsToTime(shot.startTime)} ถึง ${secondsToTime(shot.endTime)} (${shot.duration}s)\n\n**หน้าที่:** ${shot.objective}\n\n**Subjects:** ${(shot.subjects || []).join(", ")}\n\n**ฉากและการกระทำ:** ${shot.setting} ${shot.action}\n\n**กล้อง:** ${shot.camera}\n\n**Composition:** ${shot.composition}\n\n**Lighting:** ${shot.lighting}\n\n**บทพูด:**\n${dialogue}\n\n**เสียง:** ${shot.sound}\n\n**Transition:** ${shot.transition}\n\n**อารมณ์:** ${shot.emotion}\n\n**Continuity:**\n${list(shot.continuity)}\n`;
+    const actionBeats = shot.actionBeats?.length
+      ? shot.actionBeats.map((beat) => `${beat.order}. ${beat.action} → ${beat.result}`).join("\n")
+      : `1. ${shot.action || "ไม่มีข้อมูล"}`;
+    const camera = typeof shot.camera === "object"
+      ? `- Lens: ${shot.camera.lensMm}\n- Shot size: ${shot.camera.shotSize}\n- Angle: ${shot.camera.angle}\n- Position: ${shot.camera.position}\n- Movement: ${shot.camera.movement}\n- Focus: ${shot.camera.focus}`
+      : `- ${shot.camera || "ไม่มีข้อมูล"}`;
+    const sound = typeof shot.sound === "object"
+      ? `- Ambience: ${shot.sound.ambience}\n- Sync effects: ${(shot.sound.syncEffects || []).join(", ") || "ไม่มี"}\n- Voice: ${shot.sound.voice}\n- Music: ${shot.sound.music}\n- Sound bridge: ${shot.sound.bridge}`
+      : `- ${shot.sound || "ไม่มีข้อมูล"}`;
+    const transition = typeof shot.transition === "object"
+      ? `${shot.transition.type} — ${shot.transition.motivation}`
+      : shot.transition;
+    const emotion = typeof shot.emotion === "object"
+      ? `${shot.emotion.start} → ${shot.emotion.end}; สิ่งที่เห็น/ได้ยิน: ${shot.emotion.visibleCue}`
+      : shot.emotion;
+    const continuityIn = shot.continuityIn || shot.continuity || [];
+    const continuityOut = shot.continuityOut || shot.continuity || [];
+    return `## Shot ${shot.number}: ${shot.beat || shot.objective} — ${secondsToTime(shot.startTime)} ถึง ${secondsToTime(shot.endTime)} (${shot.duration}s)\n\n- Story phase: ${shot.storyPhase || "ไม่ระบุ"}\n- หน้าที่: ${shot.objective}\n- Subjects: ${(shot.subjects || []).join(", ") || "ไม่มี"}\n\n### Geography และ state\n\n**Setting:** ${shot.setting}\n\n**Spatial anchor:** ${shot.spatialAnchor || "ไม่มีข้อมูล"}\n\n**Start state:** ${shot.startState || "ไม่มีข้อมูล"}\n\n**End state:** ${shot.endState || "ไม่มีข้อมูล"}\n\n### Action beats\n\n${actionBeats}\n\n### Camera และภาพ\n\n${camera}\n\n- Composition: ${shot.composition}\n- Lighting: ${shot.lighting}\n\n### บทพูด\n\n${dialogue}\n\n### เสียง\n\n${sound}\n\n### การส่งต่อและ continuity\n\n- Transition: ${transition || "ไม่มีข้อมูล"}\n- Emotion: ${emotion || "ไม่มีข้อมูล"}\n\n**Continuity in:**\n${list(continuityIn)}\n\n**Continuity out:**\n${list(continuityOut)}\n\n**ข้อห้ามเฉพาะ shot:**\n${list(shot.negativeConstraints)}\n`;
   }).join("\n") || "ไม่มี shot";
 
   return `# Shot list: ${value.projectTitle}\n\n- ระยะเวลารวม: ${value.totalDuration} วินาที\n- จำนวน shots: ${value.shots?.length || 0}\n\n${shots}\n## Final continuity checklist\n\n${list(value.continuityChecklist)}\n`;

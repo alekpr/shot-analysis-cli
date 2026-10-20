@@ -2,27 +2,75 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizeFinalPrompt, validateFinalPrompt, validateReferencePrompts, validateShots } from "../src/validators.js";
 
+function validShot(number, startTime, endTime) {
+  return {
+    number,
+    startTime,
+    endTime,
+    duration: endTime - startTime,
+    beat: `Beat ${number}`,
+    storyPhase: number === 1 ? "hook" : "resolution",
+    objective: "Advance the story",
+    subjects: ["Subject 1"],
+    setting: "Room",
+    spatialAnchor: "Subject 1 faces the door on frame right.",
+    startState: "Subject 1 stands beside the table.",
+    action: "Subject 1 moves toward the door.",
+    actionBeats: [{ order: 1, action: "Takes one step", result: "Reaches the door" }],
+    endState: "Subject 1 reaches the closed door.",
+    camera: { lensMm: "35mm", shotSize: "medium", angle: "eye level", position: "left of the table", movement: "short track right", focus: "Subject 1" },
+    composition: "Door remains visible frame right.",
+    lighting: "Soft window light.",
+    dialogue: [],
+    sound: { ambience: "room tone", syncEffects: ["footstep"], voice: "none", music: "none", bridge: "room tone" },
+    transition: { type: "cut on action", motivation: "continue the step" },
+    continuityIn: ["door closed"],
+    continuityOut: ["door closed", "subject at door"],
+    emotion: { start: "uncertain", end: "resolved", visibleCue: "steady gaze" },
+    negativeConstraints: []
+  };
+}
+
 test("accepts a contiguous shot list with exact total duration", () => {
   const value = {
     durationSeconds: 15,
+    totalDuration: 15,
+    continuityChecklist: ["Keep wardrobe and screen direction consistent"],
     shots: [
-      { startTime: 0, endTime: 5, duration: 5 },
-      { startTime: 5, endTime: 10, duration: 5 },
-      { startTime: 10, endTime: 15, duration: 5 }
+      validShot(1, 0, 5),
+      validShot(2, 5, 10),
+      validShot(3, 10, 15)
     ]
   };
-  assert.deepEqual(validateShots(value), []);
+  assert.deepEqual(validateShots(value, 15), []);
 });
 
 test("rejects gaps and a wrong total duration", () => {
   const value = {
     durationSeconds: 15,
+    totalDuration: 15,
+    continuityChecklist: ["Keep wardrobe consistent"],
     shots: [
-      { startTime: 0, endTime: 5, duration: 5 },
-      { startTime: 6, endTime: 12, duration: 6 }
+      validShot(1, 0, 5),
+      validShot(2, 6, 12)
     ]
   };
-  assert.equal(validateShots(value).length, 2);
+  const errors = validateShots(value, 15).join("; ");
+  assert.match(errors, /เริ่มที่ 6 แต่ควรเริ่มที่ 5/);
+  assert.match(errors, /เวลารวม 12 ไม่ตรงกับ durationSeconds 15/);
+});
+
+test("rejects an underspecified production shot", () => {
+  const value = {
+    durationSeconds: 5,
+    totalDuration: 5,
+    continuityChecklist: ["Keep wardrobe consistent"],
+    shots: [{ number: 1, startTime: 0, endTime: 5, duration: 5 }]
+  };
+  const errors = validateShots(value, 5).join("; ");
+  assert.match(errors, /ไม่มี spatialAnchor/);
+  assert.match(errors, /ต้องมี actionBeats/);
+  assert.match(errors, /camera ไม่มี lensMm/);
 });
 
 test("validates final prompt section order", () => {

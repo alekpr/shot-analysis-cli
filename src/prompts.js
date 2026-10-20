@@ -9,6 +9,20 @@ export const STORY_FRAMEWORK = `
 7. หลีกเลี่ยงภาพเหมารวมเกี่ยวกับเชื้อชาติ เพศ อายุ หรือความพิการ และอย่าอ้างสูตรอัลกอริทึมที่ตรวจสอบไม่ได้เป็นข้อเท็จจริง
 `;
 
+export const SHOT_LIST_FRAMEWORK = `
+หลักออกแบบ shot list สำหรับนำไปสร้างวิดีโอจริง:
+1. แบ่ง shot ตามการเปลี่ยนข้อมูล อารมณ์ ตำแหน่ง หรือการกระทำ ไม่กำหนดจำนวน shot แบบตายตัว จังหวะเร็วใช้ shot สั้นได้ ส่วนอารมณ์สำคัญต้องมีเวลาให้ผู้ชมอ่านสีหน้าและผลของการกระทำ
+2. เปิดเรื่องด้วยภาพหรือเหตุการณ์ที่อ่านได้ทันทีภายใน 1-3 วินาทีแรก ระบุว่าใครอยู่ที่ไหน กำลังเกิดอะไร และแรงกดดันมาจากทิศใด
+3. ก่อน action ที่ซับซ้อนต้องมี spatial anchor ให้เข้าใจตำแหน่งตัวละคร ฉาก ทางเข้า ทางออก ระยะห่าง และทิศทางการเคลื่อนที่ จากนั้นรักษา screen direction และ geography ข้าม shot
+4. ทุก shot ต้องมี startState, actionBeats ตามลำดับ และ endState ที่ส่งต่อให้ shot ถัดไป เหตุเกิดก่อนผลเสมอ เช่น สัมผัสก่อนวัตถุขยับ กระแทกก่อนตัวละครเสียหลัก และปล่อยมือก่อนอุปกรณ์ตก
+5. actionBeats ต้องบอกการเคลื่อนไหวที่มองเห็นได้จริง หลีกเลี่ยงคำกว้าง เช่น “ต่อสู้กัน” หรือ “บรรยากาศตึงเครียด” โดยไม่อธิบายสิ่งที่เกิดขึ้นบนจอ
+6. ระบุกล้องให้ถ่ายได้จริง: lensMm, shotSize, angle, ตำแหน่งสัมพันธ์กับ subject, movement และ focus ห้ามให้กล้องทะลุกำแพง วัตถุ หรือตัวละคร และให้การสั่น/หลบ/แพนเกิดจากเหตุการณ์ในภาพ
+7. ให้ composition แสดง subject, อันตราย และเป้าหมายในเฟรมเดียวกันเมื่อจำเป็นต่อความเข้าใจ การ close-up ต้องมี spatial cue หรือ shot ก่อนหน้าที่ช่วยรักษาทิศทาง
+8. บทพูด เสียงสัมผัส เสียงฝีเท้า ลมหายใจ ambience และดนตรีต้องสัมพันธ์กับเวลาของ action ระบุเสียงที่ลากข้าม cut เมื่อช่วยเชื่อม shot และห้ามเพิ่ม BGM หาก STORY ไม่ต้องการ
+9. continuityIn และ continuityOut ต้องติดตามตำแหน่ง ท่าทาง มือที่ถือของ เสื้อผ้า สภาพวัตถุ แสง อารมณ์ บาดแผล และสิ่งที่หายไปจากฉาก ห้ามให้ prop หรือ subject หาย ปรากฏซ้ำ หรือกลับสภาพเอง
+10. ใช้ transition เพราะการเคลื่อนไหว เสียง สายตา หรือการเปลี่ยนข้อมูลรองรับ ไม่ใช้ transition เพื่อความสวยงามอย่างเดียว และเก็บ negativeConstraints เฉพาะข้อห้ามที่เสี่ยงเกิดจริงใน shot นั้น
+`;
+
 const jsonInstruction = "ตอบเป็น JSON object ที่ถูกต้องเท่านั้น ห้ามครอบด้วย Markdown code fence และห้ามใส่คำอธิบายนอก JSON";
 
 export function analysisPrompt(input) {
@@ -61,7 +75,7 @@ export function storyPrompt(analysis, answers, revision = "") {
 }
 
 export function shotsPrompt(story, revision = "") {
-  return `${STORY_FRAMEWORK}\n${jsonInstruction}\n\nแตกโครงเรื่องเป็น shot list ที่ต่อเนื่องและรวมเวลาเท่ากับ durationSeconds\nSTORY:\n${JSON.stringify(story, null, 2)}\nREVISION REQUEST:\n${revision || "ไม่มี"}\n\nใช้ schema นี้:\n{
+  return `${STORY_FRAMEWORK}\n${SHOT_LIST_FRAMEWORK}\n${jsonInstruction}\n\nแตกโครงเรื่องเป็น shot list ระดับ production ที่ต่อเนื่องและรวมเวลาเท่ากับ durationSeconds\nSTORY:\n${JSON.stringify(story, null, 2)}\nREVISION REQUEST:\n${revision || "ไม่มี"}\n\nใช้ schema นี้:\n{
   "projectTitle":"string",
   "durationSeconds":15,
   "shots":[{
@@ -69,22 +83,30 @@ export function shotsPrompt(story, revision = "") {
     "startTime":0,
     "endTime":5,
     "duration":5,
+    "beat":"ชื่อจังหวะภาพสั้นและเจาะจง",
+    "storyPhase":"hook|setup|escalation|turn|climax|resolution|tease",
     "objective":"string",
     "subjects":["Subject 1"],
     "setting":"string",
-    "action":"string",
-    "camera":"string",
+    "spatialAnchor":"ตำแหน่ง subject, เป้าหมาย, อันตราย, ทางเข้าออก และทิศทางในฉาก",
+    "startState":"สภาพที่รับต่อจาก shot ก่อนเมื่อเฟรมเริ่ม",
+    "action":"สรุปการกระทำหลักที่มองเห็นได้",
+    "actionBeats":[{"order":1,"action":"การกระทำที่มองเห็นได้","result":"ผลทางกายภาพหรือข้อมูลที่เกิดขึ้น"}],
+    "endState":"สภาพตัวละคร วัตถุ และตำแหน่งเมื่อจบ shot เพื่อส่งต่อ shot ถัดไป",
+    "camera":{"lensMm":"35mm","shotSize":"medium close-up","angle":"eye level","position":"ตำแหน่งกล้องสัมพันธ์กับ subject และฉาก","movement":"การเคลื่อนกล้องและเหตุผล หรือ locked-off","focus":"subject/ระนาบโฟกัสและการเปลี่ยน focus"},
     "composition":"string",
     "lighting":"string",
     "dialogue":[{"speaker":"Subject 1","language":"English","line":"string","performance":"string"}],
-    "sound":"string",
-    "transition":"string",
-    "continuity":["string"],
-    "emotion":"string"
+    "sound":{"ambience":"string","syncEffects":["string"],"voice":"string","music":"string","bridge":"เสียงที่ลากเข้า/ออก shot หรือ none"},
+    "transition":{"type":"hard cut|match cut|cut on action|whip pan|hold|อื่นๆ","motivation":"เหตุผลจาก action, sound, eyeline หรือข้อมูล"},
+    "continuityIn":["string"],
+    "continuityOut":["string"],
+    "emotion":{"start":"string","end":"string","visibleCue":"สีหน้า ท่าทาง หรือลมหายใจที่มอง/ได้ยินได้"},
+    "negativeConstraints":["สิ่งที่ห้ามเกิดเฉพาะ shot นี้"]
   }],
-  "continuityChecklist":["string"],
+  "continuityChecklist":["กฎ global สำหรับ identity, wardrobe, props, geography, screen direction, lighting และ state changes"],
   "totalDuration":15
-}\nเวลา shot แรกต้องเริ่ม 0, แต่ละ shot ต้องต่อกันโดยไม่มีช่องว่างหรือซ้อนกัน และ shot สุดท้ายต้องจบตรง durationSeconds`;
+}\nข้อกำหนดเพิ่มเติม:\n- เวลา shot แรกต้องเริ่ม 0 แต่ละ shot ต้องต่อกันโดยไม่มีช่องว่างหรือซ้อนกัน และ shot สุดท้ายต้องจบตรง durationSeconds\n- number ต้องเรียงจาก 1 โดยไม่ข้าม และ totalDuration ต้องเท่ากับ durationSeconds ของ STORY\n- จำนวนและความยาว shot ต้องเกิดจาก action และ emotional beat ห้ามเฉลี่ยเวลาเท่ากันโดยไม่มีเหตุผล\n- shot แรกต้องมี storyPhase=hook และช่วงท้ายต้องให้ผลของ climax อ่านได้ชัดก่อนจบ\n- startState ของ shot 2 เป็นต้นไปต้องสอดคล้องกับ endState ของ shot ก่อนหน้า\n- หากไม่มีบทพูดให้ใช้ dialogue เป็น [] หากไม่มีดนตรีให้ sound.music เป็น none\n- ห้ามเพิ่มตัวละคร สถานที่ prop พลัง ความเสียหาย หรือเหตุการณ์ที่ STORY ไม่รองรับ`;
 }
 
 export function referencePromptsPrompt(story, shots, existingReferences = [], revision = "") {
@@ -108,7 +130,7 @@ export function referencePromptsPrompt(story, shots, existingReferences = [], re
 }
 
 export function finalPrompt(story, shots, prefix = "DY,", visualDirection = story.visualDirection, referenceAssets = {}) {
-  return `สร้าง prompt ภาษาอังกฤษตามโครงสร้างตัวอย่างอย่างเคร่งครัด ข้อมูลทั้งหมดต้องมาจาก STORY, SHOTS, VISUAL_DIRECTION และ REFERENCE_ASSETS เท่านั้น\n\nSTORY:\n${JSON.stringify(story, null, 2)}\nSHOTS:\n${JSON.stringify(shots, null, 2)}\nVISUAL_DIRECTION:\n${JSON.stringify(visualDirection, null, 2)}\nREFERENCE_ASSETS:\n${JSON.stringify(referenceAssets, null, 2)}\n\nข้อกำหนด:\n- บรรทัดแรกต้องเริ่มด้วย ${prefix}subject_definitions:\n- ใช้หัวข้อตามลำดับ: subject_definitions, summary, retention_analysis, detailed_description, overall_soundscape, non_diegetic_music\n- กำหนดทุกตัวละครและสภาพแวดล้อมเป็น <Subject N> เท่านั้น แม้ Subject นั้นจะเป็นสถานที่ ห้ามใช้ <Environment N> หรือรูปแบบอื่น\n- ใช้ <Picture N> ทุกภาพตาม mapping ใน REFERENCE_ASSETS เพื่อกำหนดรูปลักษณ์ของตัวละคร สถานที่ และวัตถุ ห้ามสร้าง Picture ID อื่น\n- detailed_description ต้องแบ่ง [Shot N] และตั้งแต่ shot 2 เป็นต้นไป หัวบรรทัดต้องใช้รูปแบบ [Shot N] At 00:05.000 โดยคำนวณจาก startTime จริง ห้ามใช้เพียง (5s)\n- บทพูดใช้รูปแบบ <Subject N> (S1) ... <d>[English] dialogue</d> โดยเปลี่ยนภาษาตามข้อมูลจริง\n- retention_analysis ต้องระบุ shot ที่ subject และ reference image ปรากฏ รวมถึงสิ่งที่ต้องรักษา\n- ต้องสะท้อน VISUAL_DIRECTION ทั้งรูปแบบภาพและ mood อย่างสม่ำเสมอใน subject_definitions, summary และทุก shot โดยระบุผลต่อรูปลักษณ์ตัวละคร ฉาก แสง สี เลนส์ กล้อง และการเคลื่อนไหวเท่าที่เกี่ยวข้อง\n- ห้ามมี Markdown heading หรือ code fence\n- ส่งเฉพาะ prompt ฉบับสมบูรณ์`;
+  return `สร้าง prompt ภาษาอังกฤษตามโครงสร้างตัวอย่างอย่างเคร่งครัด ข้อมูลทั้งหมดต้องมาจาก STORY, SHOTS, VISUAL_DIRECTION และ REFERENCE_ASSETS เท่านั้น\n\nSTORY:\n${JSON.stringify(story, null, 2)}\nSHOTS:\n${JSON.stringify(shots, null, 2)}\nVISUAL_DIRECTION:\n${JSON.stringify(visualDirection, null, 2)}\nREFERENCE_ASSETS:\n${JSON.stringify(referenceAssets, null, 2)}\n\nข้อกำหนด:\n- บรรทัดแรกต้องเริ่มด้วย ${prefix}subject_definitions:\n- ใช้หัวข้อตามลำดับ: subject_definitions, summary, retention_analysis, detailed_description, overall_soundscape, non_diegetic_music\n- กำหนดทุกตัวละครและสภาพแวดล้อมเป็น <Subject N> เท่านั้น แม้ Subject นั้นจะเป็นสถานที่ ห้ามใช้ <Environment N> หรือรูปแบบอื่น\n- ใช้ <Picture N> ทุกภาพตาม mapping ใน REFERENCE_ASSETS เพื่อกำหนดรูปลักษณ์ของตัวละคร สถานที่ และวัตถุ ห้ามสร้าง Picture ID อื่น\n- detailed_description ต้องแบ่ง [Shot N] และตั้งแต่ shot 2 เป็นต้นไป หัวบรรทัดต้องใช้รูปแบบ [Shot N] At 00:05.000 โดยคำนวณจาก startTime จริง ห้ามใช้เพียง (5s)\n- ในแต่ละ shot ต้องรักษา spatialAnchor, startState, actionBeats ตามลำดับเหตุและผล, endState, camera, sound และ continuityIn/continuityOut จาก SHOTS ห้ามย่อจนการกระทำหรือตำแหน่งกำกวม\n- บทพูดใช้รูปแบบ <Subject N> (S1) ... <d>[English] dialogue</d> โดยเปลี่ยนภาษาตามข้อมูลจริง\n- retention_analysis ต้องระบุ shot ที่ subject และ reference image ปรากฏ รวมถึงสิ่งที่ต้องรักษา\n- ต้องสะท้อน VISUAL_DIRECTION ทั้งรูปแบบภาพและ mood อย่างสม่ำเสมอใน subject_definitions, summary และทุก shot โดยระบุผลต่อรูปลักษณ์ตัวละคร ฉาก แสง สี เลนส์ กล้อง และการเคลื่อนไหวเท่าที่เกี่ยวข้อง\n- ห้ามมี Markdown heading หรือ code fence\n- ส่งเฉพาะ prompt ฉบับสมบูรณ์`;
 }
 
 export const SYSTEM_PROMPT = "คุณเป็นนักวิเคราะห์บท ผู้กำกับ และผู้วาง shot list สำหรับวิดีโอสั้น ให้ความสำคัญกับความชัดเจน ความต่อเนื่อง ความเป็นไปได้ และเจตนาของผู้ใช้";

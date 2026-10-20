@@ -5,6 +5,35 @@ import path from "node:path";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { runNewWorkflow, runResumeWorkflow } from "../src/workflow.js";
 
+function fakeShot({ number, startTime, endTime, objective, action, composition, emotion }) {
+  return {
+    number,
+    startTime,
+    endTime,
+    duration: endTime - startTime,
+    beat: objective,
+    storyPhase: number === 1 ? "hook" : number === 3 ? "resolution" : "escalation",
+    objective,
+    subjects: ["Subject 1"],
+    setting: "restaurant",
+    spatialAnchor: "Subject 1 remains beside the same table; the exit is frame right.",
+    startState: `State entering shot ${number}`,
+    action,
+    actionBeats: [{ order: 1, action, result: `Visible result of ${action}` }],
+    endState: `State leaving shot ${number}`,
+    camera: { lensMm: "50mm", shotSize: "medium", angle: "eye level", position: "across the table", movement: "slow push motivated by emotion", focus: "Subject 1's face" },
+    composition,
+    lighting: "warm",
+    dialogue: [],
+    sound: { ambience: "room tone", syncEffects: ["cloth movement"], voice: "none", music: "none", bridge: "room tone continues" },
+    transition: { type: "hard cut", motivation: "change in action" },
+    continuityIn: ["same coat", "same table"],
+    continuityOut: ["same coat", "same table"],
+    emotion: { start: emotion, end: emotion, visibleCue: "controlled breathing and gaze" },
+    negativeConstraints: ["no extra characters"]
+  };
+}
+
 class FakeLlm {
   async generate({ prompt }) {
     if (prompt.includes("วิเคราะห์ brief")) {
@@ -59,9 +88,9 @@ class FakeLlm {
         projectTitle: "Night Goodbye",
         durationSeconds: 15,
         shots: [
-          { number: 1, startTime: 0, endTime: 5, duration: 5, objective: "hook", subjects: ["Subject 1"], setting: "restaurant", action: "looks away", camera: "medium", composition: "two shot", lighting: "warm", dialogue: [], sound: "room tone", transition: "cut", continuity: ["same coat"], emotion: "distance" },
-          { number: 2, startTime: 5, endTime: 10, duration: 5, objective: "build", subjects: ["Subject 1"], setting: "restaurant", action: "withdraws hand", camera: "close", composition: "hands", lighting: "warm", dialogue: [], sound: "cloth", transition: "cut", continuity: ["same table"], emotion: "certainty" },
-          { number: 3, startTime: 10, endTime: 15, duration: 5, objective: "resolve", subjects: ["Subject 1"], setting: "restaurant", action: "leaves", camera: "wide", composition: "exit", lighting: "warm", dialogue: [], sound: "footsteps", transition: "hold", continuity: ["same coat"], emotion: "closure" }
+          fakeShot({ number: 1, startTime: 0, endTime: 5, objective: "hook", action: "looks away", composition: "two shot", emotion: "distance" }),
+          fakeShot({ number: 2, startTime: 5, endTime: 10, objective: "build", action: "withdraws hand", composition: "hands", emotion: "certainty" }),
+          fakeShot({ number: 3, startTime: 10, endTime: 15, objective: "resolve", action: "leaves", composition: "exit", emotion: "closure" })
         ],
         continuityChecklist: ["wardrobe", "lighting"],
         totalDuration: 15

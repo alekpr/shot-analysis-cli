@@ -59,22 +59,62 @@ export function validateStory(value) {
   return errors;
 }
 
-export function validateShots(value) {
+export function validateShots(value, expectedDuration) {
   const errors = [];
   const shots = value?.shots;
   if (!Array.isArray(shots) || shots.length === 0) return ["shot list ไม่มี shots"];
   let expectedStart = 0;
   shots.forEach((shot, index) => {
+    const shotLabel = `Shot ${index + 1}`;
     const start = Number(shot.startTime);
     const end = Number(shot.endTime);
     const duration = Number(shot.duration);
-    if (Math.abs(start - expectedStart) > 0.01) errors.push(`Shot ${index + 1} เริ่มที่ ${start} แต่ควรเริ่มที่ ${expectedStart}`);
-    if (!(end > start)) errors.push(`Shot ${index + 1} มีช่วงเวลาไม่ถูกต้อง`);
-    if (Math.abs(end - start - duration) > 0.02) errors.push(`Shot ${index + 1} duration ไม่ตรงกับ start/end`);
-    expectedStart = end;
+    if (Number(shot.number) !== index + 1) errors.push(`${shotLabel} มี number ไม่ต่อเนื่อง`);
+    if (![start, end, duration].every(Number.isFinite)) {
+      errors.push(`${shotLabel} ต้องมี startTime/endTime/duration เป็นตัวเลข`);
+    } else {
+      if (Math.abs(start - expectedStart) > 0.01) errors.push(`${shotLabel} เริ่มที่ ${start} แต่ควรเริ่มที่ ${expectedStart}`);
+      if (!(end > start)) errors.push(`${shotLabel} มีช่วงเวลาไม่ถูกต้อง`);
+      if (Math.abs(end - start - duration) > 0.02) errors.push(`${shotLabel} duration ไม่ตรงกับ start/end`);
+    }
+    for (const key of ["beat", "storyPhase", "objective", "setting", "spatialAnchor", "startState", "action", "endState", "composition", "lighting"]) {
+      if (!String(shot[key] || "").trim()) errors.push(`${shotLabel} ไม่มี ${key}`);
+    }
+    if (shot.storyPhase && !["hook", "setup", "escalation", "turn", "climax", "resolution", "tease"].includes(shot.storyPhase)) {
+      errors.push(`${shotLabel} มี storyPhase ไม่ถูกต้อง`);
+    }
+    if (index === 0 && shot.storyPhase !== "hook") errors.push("Shot 1 ต้องมี storyPhase เป็น hook");
+    if (!Array.isArray(shot.subjects)) errors.push(`${shotLabel} ต้องมี subjects เป็น array`);
+    if (!Array.isArray(shot.actionBeats) || shot.actionBeats.length === 0) {
+      errors.push(`${shotLabel} ต้องมี actionBeats`);
+    } else {
+      shot.actionBeats.forEach((beat, beatIndex) => {
+        if (Number(beat.order) !== beatIndex + 1 || !beat.action || !beat.result) {
+          errors.push(`${shotLabel} actionBeats ต้องเรียง order และมี action/result`);
+        }
+      });
+    }
+    for (const key of ["lensMm", "shotSize", "angle", "position", "movement", "focus"]) {
+      if (!String(shot.camera?.[key] || "").trim()) errors.push(`${shotLabel} camera ไม่มี ${key}`);
+    }
+    if (!shot.sound || !Array.isArray(shot.sound.syncEffects)) errors.push(`${shotLabel} ต้องมี sound และ syncEffects`);
+    if (!shot.transition?.type || !shot.transition?.motivation) errors.push(`${shotLabel} ต้องมี transition type/motivation`);
+    if (!Array.isArray(shot.continuityIn) || !Array.isArray(shot.continuityOut)) errors.push(`${shotLabel} ต้องมี continuityIn/continuityOut`);
+    if (!shot.emotion?.start || !shot.emotion?.end || !shot.emotion?.visibleCue) errors.push(`${shotLabel} ต้องมี emotion start/end/visibleCue`);
+    if (!Array.isArray(shot.negativeConstraints)) errors.push(`${shotLabel} ต้องมี negativeConstraints เป็น array`);
+    if (Number.isFinite(end)) expectedStart = end;
   });
   const target = Number(value.durationSeconds);
-  if (Math.abs(expectedStart - target) > 0.02) errors.push(`เวลารวม ${expectedStart} ไม่ตรงกับ durationSeconds ${target}`);
+  const totalDuration = Number(value.totalDuration);
+  if (!Number.isFinite(target) || target <= 0) errors.push("durationSeconds ต้องเป็นตัวเลขมากกว่า 0");
+  if (Number.isFinite(target) && Math.abs(expectedStart - target) > 0.02) errors.push(`เวลารวม ${expectedStart} ไม่ตรงกับ durationSeconds ${target}`);
+  if (!Number.isFinite(totalDuration) || !Number.isFinite(target) || Math.abs(totalDuration - target) > 0.02) errors.push("totalDuration ไม่ตรงกับ durationSeconds");
+  if (expectedDuration !== undefined && Number.isFinite(target) && Math.abs(target - Number(expectedDuration)) > 0.02) {
+    errors.push(`durationSeconds ${target} ไม่ตรงกับ STORY ${Number(expectedDuration)}`);
+  }
+  if (!Array.isArray(value.continuityChecklist) || value.continuityChecklist.length === 0) {
+    errors.push("shot list ต้องมี continuityChecklist");
+  }
   return errors;
 }
 
