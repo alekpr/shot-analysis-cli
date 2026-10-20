@@ -117,7 +117,7 @@ test("workflow creates every reviewed artifact", async () => {
     ask: async () => asks.shift() ?? "",
     multiline: async () => "A quiet breakup in a restaurant.",
     multiSelect: async () => ["pure-love"],
-    choose: async () => "a"
+    choose: async (question) => question.includes("brief") ? "text" : "a"
   };
   const result = await runNewWorkflow({
     terminal,
@@ -137,6 +137,38 @@ test("workflow creates every reviewed artifact", async () => {
   assert.equal(session.referencePrompts.assets.length, 3);
 });
 
+test("workflow reads brief from a file without asking for multiline input", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-file-brief-test-"));
+  const output = path.join(workspace, "output");
+  const briefFile = path.join(workspace, "A Quiet Goodbye.md");
+  const brief = "A quiet breakup in a restaurant, told without dialogue.";
+  await writeFile(briefFile, brief, "utf8");
+
+  const asks = [undefined, "15", "Reels", "9:16", ""];
+  const terminal = {
+    ask: async (_question, defaultValue = "") => asks.shift() ?? defaultValue,
+    multiline: async () => { throw new Error("multiline input should not be requested"); },
+    multiSelect: async () => ["pure-love"],
+    choose: async () => "a"
+  };
+
+  const result = await runNewWorkflow({
+    terminal,
+    llm: new FakeLlm(),
+    args: { brief: briefFile, output },
+    settings: { provider: "gemini", model: "test", promptPrefix: "DY," }
+  });
+
+  assert.equal(result.status, "complete");
+  const savedBrief = await readFile(path.join(output, "00-brief.md"), "utf8");
+  assert.match(savedBrief, /# Brief: A Quiet Goodbye/);
+  assert.match(savedBrief, new RegExp(briefFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(savedBrief, /A quiet breakup in a restaurant/);
+  const session = JSON.parse(await readFile(path.join(output, ".shot-analysis/session.json"), "utf8"));
+  assert.equal(session.input.brief, brief);
+  assert.equal(session.input.briefFile, briefFile);
+});
+
 test("resume retries only the failed final prompt stage", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-resume-test-"));
   const asks = ["Resume Test", "15", "Reels", "9:16", ""];
@@ -144,7 +176,7 @@ test("resume retries only the failed final prompt stage", async () => {
     ask: async () => asks.shift() ?? "",
     multiline: async () => "A quiet breakup in a restaurant.",
     multiSelect: async () => ["pure-love"],
-    choose: async () => "a"
+    choose: async (question) => question.includes("brief") ? "text" : "a"
   };
   const options = {
     terminal,
@@ -183,7 +215,7 @@ test("resume continues from reference prompts without regenerating approved stag
     ask: async () => asks.shift() ?? "",
     multiline: async () => "A quiet breakup in a restaurant.",
     multiSelect: async () => ["pure-love"],
-    choose: async () => "a"
+    choose: async (question) => question.includes("brief") ? "text" : "a"
   };
   const settings = { provider: "gemini", model: "test", promptPrefix: "DY," };
   await assert.rejects(

@@ -52,6 +52,8 @@ shot-analysis new
 shot-analysis new --brief ./idea.md --output ./my-clip
 ```
 
+หากไม่ใส่ `--brief` ระบบจะถามว่าจะพิมพ์ brief หรืออ่านจากไฟล์ สามารถลากไฟล์จาก Finder มาวางใน Terminal ได้ รองรับ `.txt`, `.md`, `.json`, `.yaml` และไฟล์ข้อความ UTF-8 ขนาดไม่เกิน 5 MB นอกจากนี้ยังใช้ `--brief-file` แทน `--brief` ได้
+
 ขั้นตอน interactive จะทำงานตามลำดับ:
 
 1. รับ brief และข้อมูลพื้นฐาน

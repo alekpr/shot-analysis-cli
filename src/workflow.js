@@ -6,6 +6,7 @@ import { renderAnalysis, renderReferencePrompts, renderShots, renderStory } from
 import { selectStoryCores } from "./cores.js";
 import { resolveVisualDirection } from "./visual-direction.js";
 import { normalizeFinalPrompt, validateAnalysis, validateFinalPrompt, validateReferencePrompts, validateShots, validateStory } from "./validators.js";
+import { loadBriefFile } from "./brief.js";
 
 async function saveText(target, content) {
   await writeFile(target, content.endsWith("\n") ? content : `${content}\n`, "utf8");
@@ -164,9 +165,19 @@ async function reviewDocument(terminal, label, file, regenerate) {
 }
 
 export async function runNewWorkflow({ terminal, llm, args, settings }) {
-  const briefFromFile = args.brief ? await readFile(resolveOutputPath(args.brief), "utf8") : "";
-  const projectName = await terminal.ask("ชื่อโปรเจกต์คลิป", "untitled-clip");
-  const brief = briefFromFile || await terminal.multiline("อธิบายคลิปที่ต้องการสร้าง ตัวละคร เหตุการณ์ อารมณ์ และสิ่งอ้างอิงที่มี");
+  let briefFilePath = args.brief || args["brief-file"] || "";
+  if (!briefFilePath) {
+    const inputMode = await terminal.choose("ต้องการระบุ brief ด้วยวิธีใด", [
+      { key: "text", label: "พิมพ์หรือวางข้อความใน Terminal" },
+      { key: "file", label: "อ่านจากไฟล์ข้อความ" }
+    ], "text");
+    if (inputMode === "file") briefFilePath = await terminal.ask("path ของไฟล์ brief (สามารถลากไฟล์มาวางได้)");
+  }
+  const briefFile = briefFilePath ? await loadBriefFile(briefFilePath) : null;
+  if (briefFile) console.log(`อ่าน brief จาก: ${briefFile.file}`);
+  const defaultProjectName = briefFile ? path.basename(briefFile.file, path.extname(briefFile.file)) : "untitled-clip";
+  const projectName = await terminal.ask("ชื่อโปรเจกต์คลิป", defaultProjectName);
+  const brief = briefFile?.content || await terminal.multiline("อธิบายคลิปที่ต้องการสร้าง ตัวละคร เหตุการณ์ อารมณ์ และสิ่งอ้างอิงที่มี");
   if (!brief) throw new Error("ต้องมี brief เริ่มต้น");
 
   const durationSeconds = Number(await terminal.ask("ความยาวคลิป (วินาที)", "15"));
@@ -188,10 +199,10 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
   }
   await mkdir(outputFolder, { recursive: true });
 
-  const input = { projectName, brief, durationSeconds, targetPlatform, aspectRatio, references };
+  const input = { projectName, brief, durationSeconds, targetPlatform, aspectRatio, references, ...(briefFile ? { briefFile: briefFile.file } : {}) };
   const answers = {};
   const state = { version: 2, status: "analyzing", provider: settings.provider, model: settings.model, input, answers, outputFolder };
-  await saveText(path.join(outputFolder, "00-brief.md"), `# Brief: ${projectName}\n\n${brief}\n\n- Duration: ${durationSeconds}s\n- Platform: ${targetPlatform}\n- Aspect ratio: ${aspectRatio}\n- References: ${references || "ไม่มี"}\n`);
+  await saveText(path.join(outputFolder, "00-brief.md"), `# Brief: ${projectName}\n\n${brief}\n\n- Brief source: ${briefFile?.file || "Terminal"}\n- Duration: ${durationSeconds}s\n- Platform: ${targetPlatform}\n- Aspect ratio: ${aspectRatio}\n- References: ${references || "ไม่มี"}\n`);
   await saveState(outputFolder, state);
 
   console.log("\nกำลังวิเคราะห์ brief...");

@@ -6,7 +6,7 @@ import { createTerminal } from "./terminal.js";
 import { parseArgs } from "./utils.js";
 import { runNewWorkflow, runResumeWorkflow } from "./workflow.js";
 
-const HELP = `shot-analysis-cli\n\nคำสั่ง:\n  shot-analysis config                 ตั้งค่า LLM provider และ model\n  shot-analysis new [options]          เริ่มโปรเจกต์คลิปแบบ interactive\n  shot-analysis resume [folder]        ทำงานต่อจาก checkpoint ล่าสุด\n  shot-analysis status [folder]        ดูสถานะโปรเจกต์\n\noptions ของ new:\n  --brief <file>                        อ่าน brief เริ่มต้นจากไฟล์\n  --output <folder>                     กำหนดโฟลเดอร์เอกสารโปรเจกต์\n\nตั้ง provider, model และ API keys ผ่าน .env ได้ ค่าใน .env มีลำดับความสำคัญสูงกว่า settings`;
+const HELP = `shot-analysis-cli\n\nคำสั่ง:\n  shot-analysis config                 ตั้งค่า LLM provider และ model\n  shot-analysis new [options]          เริ่มโปรเจกต์คลิปแบบ interactive\n  shot-analysis resume [folder]        ทำงานต่อจาก checkpoint ล่าสุด\n  shot-analysis status [folder]        ดูสถานะโปรเจกต์\n\noptions ของ new:\n  --brief <file>                        อ่าน brief จากไฟล์ข้อความ\n  --brief-file <file>                   alias ของ --brief\n  --output <folder>                     กำหนดโฟลเดอร์เอกสารโปรเจกต์\n\nหากไม่ระบุ --brief ระบบจะให้เลือกพิมพ์ brief หรืออ่านจากไฟล์ รองรับ .txt, .md, .json, .yaml และไฟล์ข้อความ UTF-8\nตั้ง provider, model และ API keys ผ่าน .env ได้ ค่าใน .env มีลำดับความสำคัญสูงกว่า settings`;
 
 async function configure(terminal) {
   const existing = await loadConfig();
