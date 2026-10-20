@@ -102,6 +102,19 @@ test("adds the configured prefix when the model starts at subject_definitions", 
   assert.ok(normalized.startsWith("TEST,subject_definitions:"));
 });
 
+test("adds canonical visual direction metadata when the model translates the label", () => {
+  const visualDirection = {
+    id: "live-action-cinematic",
+    label: "ภาพยนตร์สมจริง (Live-action cinematic)",
+    mood: "warm and hopeful"
+  };
+  const raw = `DY,subject_definitions:\n<Subject 1> is cinematic.\nsummary:\nA photorealistic live-action scene with a warm hopeful tone.\nretention_analysis:\nC\ndetailed_description:\n[Shot 1] Start.\noverall_soundscape:\nE\nnon_diegetic_music:\nF`;
+  const normalized = normalizeFinalPrompt(raw, "DY,", visualDirection);
+  assert.match(normalized, /Visual direction: ภาพยนตร์สมจริง \(Live-action cinematic\)/);
+  assert.match(normalized, /Mood: warm and hopeful/);
+  assert.deepEqual(validateFinalPrompt(normalized, "DY,", 1, visualDirection), []);
+});
+
 test("validates character and location reference prompts with unique picture IDs", () => {
   const value = {
     globalStyle: { visualDirection: "Anime" },

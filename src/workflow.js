@@ -311,7 +311,7 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
 
   console.log("กำลังสร้าง generation prompt ฉบับสุดท้าย...");
   const prefix = settings.promptPrefix ?? "DY,";
-  let generated = normalizeFinalPrompt(await trackFailure(outputFolder, state, () => llm.generate({ system: SYSTEM_PROMPT, prompt: finalPrompt(story, shots, prefix, selectedVisualDirection, referencePrompts), temperature: 0.2 })), prefix);
+  let generated = normalizeFinalPrompt(await trackFailure(outputFolder, state, () => llm.generate({ system: SYSTEM_PROMPT, prompt: finalPrompt(story, shots, prefix, selectedVisualDirection, referencePrompts), temperature: 0.2 })), prefix, selectedVisualDirection);
   const expectedShotCount = shots.shots.length;
   let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts);
   if (errors.length) {
@@ -319,7 +319,7 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
       system: SYSTEM_PROMPT,
       prompt: `แก้ prompt ให้ผ่านข้อกำหนด: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วยตัวอักษร ${prefix}subject_definitions: ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\n${generated}`,
       temperature: 0.1
-    })), prefix);
+    })), prefix, selectedVisualDirection);
     errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts);
   }
   if (errors.length) {
@@ -481,7 +481,7 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
         system: SYSTEM_PROMPT,
         prompt: finalPrompt(state.story, state.shots, prefix, selectedVisualDirection, state.referencePrompts),
         temperature: 0.2
-      }), prefix);
+      }), prefix, selectedVisualDirection);
       const expectedShotCount = state.shots.shots.length;
       let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts);
       if (errors.length) {
@@ -489,7 +489,7 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
           system: SYSTEM_PROMPT,
           prompt: `แก้ prompt ให้ผ่านข้อกำหนด: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วยตัวอักษร ${prefix}subject_definitions: ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\n${generated}`,
           temperature: 0.1
-        }), prefix);
+        }), prefix, selectedVisualDirection);
         errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts);
       }
       if (errors.length) {

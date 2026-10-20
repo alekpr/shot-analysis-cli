@@ -45,7 +45,7 @@ class FakeLlm {
         durationSeconds: 15,
         aspectRatio: "9:16",
         visualStyle: "cinematic",
-        visualDirection: { medium: "live-action-cinematic", label: "Live-action cinematic", mood: "melancholic", source: "explicit", evidence: "cinematic brief" },
+        visualDirection: { medium: "live-action-cinematic", label: "ภาพยนตร์สมจริง (Live-action cinematic)", mood: "melancholic", source: "explicit", evidence: "cinematic brief" },
         audience: "adult drama viewers",
         desiredEmotion: "melancholy",
         coreChoices: [{ name: "รักและการเสียสละ", reason: "emotional closure" }],
@@ -164,6 +164,8 @@ test("workflow creates every reviewed artifact", async () => {
   assert.equal(session.selectedCores[0].role, "primary");
   assert.equal(session.selectedVisualDirection.id, "live-action-cinematic");
   assert.equal(session.referencePrompts.assets.length, 3);
+  const finalPrompt = await readFile(path.join(root, "05-generation-prompt.txt"), "utf8");
+  assert.match(finalPrompt, /Visual direction: ภาพยนตร์สมจริง \(Live-action cinematic\)/);
 });
 
 test("workflow reads brief from a file without asking for multiline input", async () => {

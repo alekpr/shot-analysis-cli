@@ -11,7 +11,7 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-export function normalizeFinalPrompt(value, prefix = "DY,") {
+export function normalizeFinalPrompt(value, prefix = "DY,", visualDirection) {
   let normalized = String(value || "")
     .replace(/^\uFEFF/, "")
     .trim()
@@ -31,6 +31,18 @@ export function normalizeFinalPrompt(value, prefix = "DY,") {
     const name = section.slice(0, -1);
     const heading = new RegExp(`^\\s*(?:#{1,6}\\s*)?(?:\\*{1,2})?${name}(?:\\*{1,2})?\\s*:`, "gim");
     normalized = normalized.replace(heading, `${section}`);
+  }
+
+  const metadata = [];
+  const normalizedLower = normalized.toLocaleLowerCase();
+  if (visualDirection?.label && !normalizedLower.includes(visualDirection.label.toLocaleLowerCase())) {
+    metadata.push(`Visual direction: ${visualDirection.label}`);
+  }
+  if (visualDirection?.mood && !normalizedLower.includes(visualDirection.mood.toLocaleLowerCase())) {
+    metadata.push(`Mood: ${visualDirection.mood}`);
+  }
+  if (metadata.length) {
+    normalized = normalized.replace(/^summary:[ \t]*(?:\r?\n)?/m, `summary:\n${metadata.join("\n")}\n`);
   }
   return normalized.trim();
 }
