@@ -74,6 +74,16 @@ export function validateAnalysis(value) {
   if (!value?.visualDirection || !["explicit", "missing"].includes(value.visualDirection.source)) {
     errors.push("analysis ต้องมี visualDirection.source เป็น explicit หรือ missing");
   }
+  const shotRecommendation = value?.shotCountRecommendation;
+  const recommended = Number(shotRecommendation?.recommended);
+  const minimum = Number(shotRecommendation?.minimum);
+  const maximum = Number(shotRecommendation?.maximum);
+  if (![recommended, minimum, maximum].every((number) => Number.isInteger(number) && number >= 1 && number <= 100)) {
+    errors.push("analysis ต้องมี shotCountRecommendation เป็นจำนวนเต็ม 1-100");
+  } else if (minimum > recommended || recommended > maximum) {
+    errors.push("shotCountRecommendation ต้องเรียง minimum <= recommended <= maximum");
+  }
+  if (!String(shotRecommendation?.rationale || "").trim()) errors.push("shotCountRecommendation ต้องมี rationale");
   return errors;
 }
 
@@ -87,7 +97,7 @@ export function validateStory(value) {
   return errors;
 }
 
-export function validateShots(value, expectedDuration) {
+export function validateShots(value, expectedDuration, expectedShotCount) {
   const errors = [];
   const shots = value?.shots;
   if (!Array.isArray(shots) || shots.length === 0) return ["shot list ไม่มี shots"];
@@ -153,6 +163,9 @@ export function validateShots(value, expectedDuration) {
   }
   if (!Array.isArray(value.continuityChecklist) || value.continuityChecklist.length === 0) {
     errors.push("shot list ต้องมี continuityChecklist");
+  }
+  if (expectedShotCount !== undefined && shots.length !== Number(expectedShotCount)) {
+    errors.push(`shot list มี ${shots.length} shots แต่ผู้ใช้เลือก ${Number(expectedShotCount)} shots`);
   }
   return errors;
 }

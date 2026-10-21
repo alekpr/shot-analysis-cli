@@ -36,6 +36,7 @@ export function analysisPrompt(input) {
   "language": "string",
   "targetPlatform": "string",
   "durationSeconds": 15,
+  "shotCountRecommendation": {"minimum":3,"recommended":5,"maximum":7,"rationale":"เหตุผลจากความยาว จำนวน action/emotional beats และเวลาที่ผู้ชมต้องใช้ทำความเข้าใจภาพ"},
   "aspectRatio": "string",
   "visualStyle": "string",
   "visualDirection": {"medium":"live-action-cinematic|anime|3d-animation|2d-illustration|documentary|commercial|custom|null","label":"string|null","mood":"string|null","source":"explicit|missing","evidence":"ข้อความจาก brief หรือเหตุผลที่ระบุว่าไม่พบ"},
@@ -51,7 +52,7 @@ export function analysisPrompt(input) {
   "missingInformation": ["string"],
   "clarificationQuestions": [{"id":"snake_case","question":"คำถามภาษาไทยที่ตอบง่าย","why":"string","required":true}],
   "readiness": {"score": 0, "canProceed": false, "rationale": "string"}
-}\nvisualDirection.source ต้องเป็น explicit เฉพาะเมื่อ brief หรือคำตอบของผู้ใช้ระบุรูปแบบภาพอย่างชัดเจน เช่น ภาพยนตร์, live action, anime, 3D, illustration, documentary หรือ commercial หากไม่พบให้ตั้ง source เป็น missing และ medium/label เป็น null ห้ามเดา และไม่ต้องสร้าง clarificationQuestions สำหรับ visualDirection เพราะ CLI จะถามจากรายการโดยตรง ถามข้อมูลอื่นเฉพาะที่มีผลต่อโครงเรื่องหรือการสร้าง shot จริง ไม่เกิน 7 ข้อ หากอนุมานได้อย่างปลอดภัยให้ระบุเป็นสมมติฐานใน constraints แทนการถาม`;
+}\nshotCountRecommendation ต้องประเมินจาก durationSeconds จำนวนการเปลี่ยนข้อมูล/action/emotional beat ความซับซ้อนของฉาก และเวลาที่ต้องใช้ให้ motion อ่านออก ห้ามใช้สูตรตายตัว หาก input.requestedShotCount มีค่า ให้ยังคงเสนอจำนวนที่เหมาะสมอย่างอิสระเพื่อให้ผู้ใช้เปรียบเทียบ\nvisualDirection.source ต้องเป็น explicit เฉพาะเมื่อ brief หรือคำตอบของผู้ใช้ระบุรูปแบบภาพอย่างชัดเจน เช่น ภาพยนตร์, live action, anime, 3D, illustration, documentary หรือ commercial หากไม่พบให้ตั้ง source เป็น missing และ medium/label เป็น null ห้ามเดา และไม่ต้องสร้าง clarificationQuestions สำหรับ visualDirection เพราะ CLI จะถามจากรายการโดยตรง ถามข้อมูลอื่นเฉพาะที่มีผลต่อโครงเรื่องหรือการสร้าง shot จริง ไม่เกิน 7 ข้อ หากอนุมานได้อย่างปลอดภัยให้ระบุเป็นสมมติฐานใน constraints แทนการถาม`;
 }
 
 export function storyPrompt(analysis, answers, revision = "") {
@@ -75,7 +76,7 @@ export function storyPrompt(analysis, answers, revision = "") {
   "soundDirection":"string",
   "risks":["string"],
   "rationale":"string"
-}\nต้องใช้ selectedVisualDirection จาก ANALYSIS เป็นข้อกำหนดด้านภาพของเรื่อง และใช้ selectedCores ทุก Core ตาม role ที่ผู้ใช้เลือก โดยให้ primary เป็นแกนขับเคลื่อนเรื่องและ secondary เป็นแกนสนับสนุน ห้ามแทนด้วย Core อื่น ต้องบอกความสัมพันธ์เหตุและผลชัดเจน ให้จุดเริ่ม กลาง และจบพอดีกับระยะเวลา`;
+}\nต้องใช้ selectedVisualDirection จาก ANALYSIS เป็นข้อกำหนดด้านภาพของเรื่อง และใช้ selectedCores ทุก Core ตาม role ที่ผู้ใช้เลือก โดยให้ primary เป็นแกนขับเคลื่อนเรื่องและ secondary เป็นแกนสนับสนุน ห้ามแทนด้วย Core อื่น วางจังหวะเรื่องให้รองรับ ANALYSIS.selectedShotCount โดยแต่ละ shot มีหน้าที่ต่างกัน ต้องบอกความสัมพันธ์เหตุและผลชัดเจน ให้จุดเริ่ม กลาง และจบพอดีกับระยะเวลา`;
 }
 
 export function shotsPrompt(story, revision = "") {

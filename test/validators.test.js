@@ -42,7 +42,17 @@ test("accepts a contiguous shot list with exact total duration", () => {
       validShot(3, 10, 15)
     ]
   };
-  assert.deepEqual(validateShots(value, 15), []);
+  assert.deepEqual(validateShots(value, 15, 3), []);
+});
+
+test("rejects a shot list that does not match the selected count", () => {
+  const value = {
+    durationSeconds: 5,
+    totalDuration: 5,
+    continuityChecklist: ["Keep state"],
+    shots: [validShot(1, 0, 5)]
+  };
+  assert.match(validateShots(value, 5, 3).join("; "), /มี 1 shots แต่ผู้ใช้เลือก 3 shots/);
 });
 
 test("rejects gaps and a wrong total duration", () => {

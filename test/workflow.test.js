@@ -43,6 +43,7 @@ class FakeLlm {
         language: "Thai",
         targetPlatform: "Reels",
         durationSeconds: 15,
+        shotCountRecommendation: { minimum: 2, recommended: 3, maximum: 5, rationale: "Three clear emotional beats fit 15 seconds." },
         aspectRatio: "9:16",
         visualStyle: "cinematic",
         visualDirection: { medium: "live-action-cinematic", label: "ภาพยนตร์สมจริง (Live-action cinematic)", mood: "melancholic", source: "explicit", evidence: "cinematic brief" },
@@ -186,7 +187,7 @@ test("generateJson repairs a parsed response that fails schema validation", asyn
 
 test("workflow creates every reviewed artifact", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-test-"));
-  const asks = ["Night Goodbye", "15", "Reels", "9:16", ""];
+  const asks = ["Night Goodbye", "15", "", "Reels", "9:16", ""];
   const terminal = {
     ask: async () => asks.shift() ?? "",
     multiline: async () => "A quiet breakup in a restaurant.",
@@ -208,6 +209,7 @@ test("workflow creates every reviewed artifact", async () => {
   const session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
   assert.equal(session.selectedCores[0].role, "primary");
   assert.equal(session.selectedVisualDirection.id, "live-action-cinematic");
+  assert.equal(session.selectedShotCount, 3);
   assert.equal(session.referencePrompts.assets.length, 3);
   const finalPrompt = await readFile(path.join(root, "05-generation-prompt.txt"), "utf8");
   assert.match(finalPrompt, /Visual direction: ภาพยนตร์สมจริง \(Live-action cinematic\)/);
@@ -220,7 +222,7 @@ test("workflow reads brief from a file without asking for multiline input", asyn
   const brief = "A quiet breakup in a restaurant, told without dialogue.";
   await writeFile(briefFile, brief, "utf8");
 
-  const asks = [undefined, "15", "Reels", "9:16", ""];
+  const asks = [undefined, "15", "", "Reels", "9:16", ""];
   const terminal = {
     ask: async (_question, defaultValue = "") => asks.shift() ?? defaultValue,
     multiline: async () => { throw new Error("multiline input should not be requested"); },
@@ -247,7 +249,7 @@ test("workflow reads brief from a file without asking for multiline input", asyn
 
 test("resume retries only the failed final prompt stage", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-resume-test-"));
-  const asks = ["Resume Test", "15", "Reels", "9:16", ""];
+  const asks = ["Resume Test", "15", "", "Reels", "9:16", ""];
   const terminal = {
     ask: async () => asks.shift() ?? "",
     multiline: async () => "A quiet breakup in a restaurant.",
@@ -286,7 +288,7 @@ test("resume retries only the failed final prompt stage", async () => {
 
 test("resume continues from reference prompts without regenerating approved stages", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-reference-resume-test-"));
-  const asks = ["Reference Resume", "15", "Reels", "9:16", ""];
+  const asks = ["Reference Resume", "15", "", "Reels", "9:16", ""];
   const terminal = {
     ask: async () => asks.shift() ?? "",
     multiline: async () => "A quiet breakup in a restaurant.",

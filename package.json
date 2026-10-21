@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node ./bin/shot-analysis.js",
     "test": "node --test",
-    "check": "node --check ./bin/shot-analysis.js && node --check ./src/brief.js && node --check ./src/cli.js && node --check ./src/workflow.js"
+    "check": "node --check ./bin/shot-analysis.js && node --check ./src/brief.js && node --check ./src/cli.js && node --check ./src/shot-count.js && node --check ./src/workflow.js"
   },
   "engines": {
     "node": ">=20.17"

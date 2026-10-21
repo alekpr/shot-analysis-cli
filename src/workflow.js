@@ -7,6 +7,7 @@ import { selectStoryCores } from "./cores.js";
 import { resolveVisualDirection } from "./visual-direction.js";
 import { normalizeFinalPrompt, validateAnalysis, validateFinalPrompt, validateReferencePrompts, validateShots, validateStory } from "./validators.js";
 import { loadBriefFile } from "./brief.js";
+import { parseShotCountPreference, selectShotCount } from "./shot-count.js";
 
 async function saveText(target, content) {
   await writeFile(target, content.endsWith("\n") ? content : `${content}\n`, "utf8");
@@ -191,6 +192,7 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
   if (!brief) throw new Error("ต้องมี brief เริ่มต้น");
 
   const durationSeconds = Number(await terminal.ask("ความยาวคลิป (วินาที)", "15"));
+  const requestedShotCount = parseShotCountPreference(await terminal.ask("จำนวน shots ที่ต้องการ (เว้นว่างเพื่อให้ LLM แนะนำ)", ""));
   const targetPlatform = await terminal.ask("แพลตฟอร์มเป้าหมาย", "Facebook Reels");
   const aspectRatio = await terminal.ask("อัตราส่วนภาพ", "9:16");
   const references = await terminal.ask("รายการภาพอ้างอิง เช่น Picture 1, Picture 2 (เว้นว่างได้)", "");
@@ -209,10 +211,10 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
   }
   await mkdir(outputFolder, { recursive: true });
 
-  const input = { projectName, brief, durationSeconds, targetPlatform, aspectRatio, references, ...(briefFile ? { briefFile: briefFile.file } : {}) };
+  const input = { projectName, brief, durationSeconds, requestedShotCount, targetPlatform, aspectRatio, references, ...(briefFile ? { briefFile: briefFile.file } : {}) };
   const answers = {};
   const state = { version: 2, status: "analyzing", provider: settings.provider, model: settings.model, input, answers, outputFolder };
-  await saveText(path.join(outputFolder, "00-brief.md"), `# Brief: ${projectName}\n\n${brief}\n\n- Brief source: ${briefFile?.file || "Terminal"}\n- Duration: ${durationSeconds}s\n- Platform: ${targetPlatform}\n- Aspect ratio: ${aspectRatio}\n- References: ${references || "ไม่มี"}\n`);
+  await saveText(path.join(outputFolder, "00-brief.md"), `# Brief: ${projectName}\n\n${brief}\n\n- Brief source: ${briefFile?.file || "Terminal"}\n- Duration: ${durationSeconds}s\n- Shot preference: ${requestedShotCount ? `${requestedShotCount} shots` : "ให้ LLM แนะนำ"}\n- Platform: ${targetPlatform}\n- Aspect ratio: ${aspectRatio}\n- References: ${references || "ไม่มี"}\n`);
   await saveState(outputFolder, state);
 
   console.log("\nกำลังวิเคราะห์ brief...");
@@ -243,6 +245,9 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
       return { outputFolder, status: state.status };
     }
   }
+  const selectedShotCount = await selectShotCount(terminal, analysis, requestedShotCount);
+  analysis.selectedShotCount = selectedShotCount;
+  state.selectedShotCount = selectedShotCount;
   const selectedVisualDirection = await resolveVisualDirection(terminal, analysis);
   analysis.selectedVisualDirection = selectedVisualDirection;
   state.selectedVisualDirection = selectedVisualDirection;
@@ -276,13 +281,13 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
   if (!storyApproved) return { outputFolder, status: state.status };
 
   console.log("กำลังแตกโครงเรื่องเป็น shot list...");
-  let shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story), (value) => validateShots(value, story.durationSeconds), "shot list"));
+  let shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story, `สร้างจำนวน ${selectedShotCount} shots เท่านั้น`), (value) => validateShots(value, story.durationSeconds, selectedShotCount), "shot list"));
   const shotsFile = path.join(outputFolder, "03-shots.md");
   await saveText(shotsFile, renderShots(shots));
   state.shots = shots;
   await checkpoint(outputFolder, state, "shots-review");
   const shotsApproved = await reviewDocument(terminal, "shot list", shotsFile, async (notes) => {
-    shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story, notes), (value) => validateShots(value, story.durationSeconds), "shot list"));
+    shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story, `${notes}\nต้องคงจำนวน ${selectedShotCount} shots เท่านั้น`), (value) => validateShots(value, story.durationSeconds, selectedShotCount), "shot list"));
     await saveText(shotsFile, renderShots(shots));
     state.shots = shots;
     await checkpoint(outputFolder, state, "shots-review");
@@ -409,6 +414,13 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
 
     const analysis = state.analysis;
     const selectedVisualDirection = state.selectedVisualDirection || analysis.selectedVisualDirection;
+    let selectedShotCount = state.selectedShotCount || analysis.selectedShotCount;
+    if (!selectedShotCount && !state.shots) {
+      selectedShotCount = await selectShotCount(terminal, analysis, state.input.requestedShotCount);
+      state.selectedShotCount = selectedShotCount;
+      analysis.selectedShotCount = selectedShotCount;
+      await checkpoint(outputFolder, state, state.status);
+    }
 
     if (!state.story || ["story-generation", "story-review"].includes(state.status)) {
       let story = state.story;
@@ -436,13 +448,13 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
       const shotsFile = path.join(outputFolder, "03-shots.md");
       if (!shots) {
         console.log("กำลังสร้าง shot list ต่อ...");
-        shots = await generateJson(llm, shotsPrompt(state.story), (value) => validateShots(value, state.story.durationSeconds), "shot list");
+        shots = await generateJson(llm, shotsPrompt(state.story, `สร้างจำนวน ${selectedShotCount} shots เท่านั้น`), (value) => validateShots(value, state.story.durationSeconds, selectedShotCount), "shot list");
         state.shots = shots;
         await saveText(shotsFile, renderShots(shots));
         await checkpoint(outputFolder, state, "shots-review");
       }
       const approved = await reviewDocument(terminal, "shot list", shotsFile, async (notes) => {
-        shots = await generateJson(llm, shotsPrompt(state.story, notes), (value) => validateShots(value, state.story.durationSeconds), "shot list");
+        shots = await generateJson(llm, shotsPrompt(state.story, `${notes}\nต้องคงจำนวน ${selectedShotCount} shots เท่านั้น`), (value) => validateShots(value, state.story.durationSeconds, selectedShotCount), "shot list");
         state.shots = shots;
         await saveText(shotsFile, renderShots(shots));
         await checkpoint(outputFolder, state, "shots-review");

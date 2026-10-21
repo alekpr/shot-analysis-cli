@@ -32,6 +32,7 @@ async function showStatus(folder = ".") {
   console.log(`Project: ${state.input?.projectName || "-"}`);
   console.log(`Status: ${state.status}`);
   console.log(`Provider: ${state.provider} / ${state.model}`);
+  console.log(`Shots: ${state.selectedShotCount || state.shots?.shots?.length || state.input?.requestedShotCount || "-"}`);
   console.log(`Folder: ${state.outputFolder}`);
   if (state.lastError) console.log(`Last error: [${state.lastError.stage}] ${state.lastError.message}`);
 }
