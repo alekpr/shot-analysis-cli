@@ -196,7 +196,7 @@ CLI จะทำงานตามลำดับดังนี้:
 4. เลือกรูปแบบภาพและ mood หาก brief ยังไม่ได้ระบุ
 5. เลือก Core 1–3 รายการและกำหนด Primary Core
 6. สร้างโครงเรื่องให้ตรวจและอนุมัติ
-7. สร้าง shot list ตามจำนวนที่ยืนยัน พร้อมตรวจเวลา continuity และ action ที่ซ้ำกัน
+7. สร้าง shot list ตามจำนวนที่ยืนยัน พร้อมออกแบบ cinematic hook, attention path และ visual payoff แล้วตรวจเวลา continuity และ action ที่ซ้ำกัน
 8. สร้าง prompt สำหรับ Character sheets, Locations และ Objects พร้อม Picture ID
 9. สร้าง generation prompt ฉบับสุดท้ายจากข้อมูลที่อนุมัติแล้ว โดยเขียนแต่ละ shot เป็นย่อหน้า production prompt ภาษาอังกฤษแบบละเอียด
 
@@ -219,7 +219,7 @@ CLI จะทำงานตามลำดับดังนี้:
 | `00-brief.md` | Brief ข้อมูลพื้นฐาน และจำนวน shot ที่ผู้ใช้ระบุหรือสถานะให้ LLM แนะนำ |
 | `01-analysis.md` | ผลวิเคราะห์ จำนวน shot ที่ LLM แนะนำและผู้ใช้เลือก ข้อมูลภาพ mood และ Core |
 | `02-story.md` | โครงเรื่องที่ผ่านขั้น review |
-| `03-shots.md` | Production shot list พร้อม beat, geography, state, action, กล้อง, เสียง และ continuity โดยตรวจ state handoff และ action ซ้ำระหว่าง shot ที่ติดกัน |
+| `03-shots.md` | Production shot list พร้อม cinematic intent, attention path, visual payoff, beat, geography, state, action, กล้อง, เสียง และ continuity |
 | `04-reference-image-prompts.md` | Prompt สำหรับ Character, Location และ Object references |
 | `05-generation-prompt.txt` | Generation prompt ฉบับรวม พร้อม Subject/Picture definitions และย่อหน้าราย shot ที่ระบุกล้อง geography ลำดับ action สีหน้า แสง เสียง บทพูด transition และ continuity |
 | `.shot-analysis/session.json` | สถานะและข้อมูล checkpoint สำหรับ `status` และ `resume` |

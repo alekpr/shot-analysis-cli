@@ -115,7 +115,7 @@ export function validateShots(value, expectedDuration, expectedShotCount) {
       if (!(end > start)) errors.push(`${shotLabel} มีช่วงเวลาไม่ถูกต้อง`);
       if (Math.abs(end - start - duration) > 0.02) errors.push(`${shotLabel} duration ไม่ตรงกับ start/end`);
     }
-    for (const key of ["beat", "storyPhase", "objective", "setting", "spatialAnchor", "startState", "action", "endState", "composition", "lighting"]) {
+    for (const key of ["beat", "storyPhase", "objective", "cinematicIntent", "attentionFocus", "visualPayoff", "setting", "spatialAnchor", "startState", "action", "endState", "composition", "lighting"]) {
       if (!String(shot[key] || "").trim()) errors.push(`${shotLabel} ไม่มี ${key}`);
     }
     if (shot.storyPhase && !["hook", "setup", "escalation", "turn", "climax", "resolution", "tease"].includes(shot.storyPhase)) {

@@ -13,7 +13,10 @@ test("shot prompt requires production-level action, camera, sound, and continuit
     "syncEffects",
     "continuityIn",
     "continuityOut",
-    "negativeConstraints"
+    "negativeConstraints",
+    "cinematicIntent",
+    "attentionFocus",
+    "visualPayoff"
   ]) {
     assert.match(prompt, new RegExp(`\\"${field}\\"`));
   }
@@ -34,5 +37,7 @@ test("final prompt carries production shot details into generation", () => {
 test("shot and system prompts prevent motion resets and repeated actions", () => {
   assert.match(SHOT_LIST_FRAMEWORK, /endState ของ shot ก่อนต้องเป็น startState ของ shot ถัดไปแบบคำต่อคำ/);
   assert.match(SHOT_LIST_FRAMEWORK, /ห้ามย้อนกลับไปเริ่มเอื้อมมือใหม่/);
+  assert.match(SHOT_LIST_FRAMEWORK, /ภาษาภาพยนตร์ที่ดึงสายตา/);
+  assert.match(SHOT_LIST_FRAMEWORK, /ภาพที่ทรงพลังที่สุดไว้ให้ climax\/payoff/);
   assert.match(SYSTEM_PROMPT, /ห้ามบรรยาย motion, action beat หรือบทพูดเดิมซ้ำ/);
 });

@@ -11,6 +11,9 @@ function validShot(number, startTime, endTime) {
     beat: `Beat ${number}`,
     storyPhase: number === 1 ? "hook" : "resolution",
     objective: "Advance the story",
+    cinematicIntent: "Build curiosity through a motivated reveal.",
+    attentionFocus: "The eye sees Subject 1 first, then discovers the closed door.",
+    visualPayoff: `Subject 1 reaches mark ${number} in the final frame.`,
     subjects: ["Subject 1"],
     setting: "Room",
     spatialAnchor: "Subject 1 faces the door on frame right.",
@@ -79,6 +82,7 @@ test("rejects an underspecified production shot", () => {
   };
   const errors = validateShots(value, 5).join("; ");
   assert.match(errors, /ไม่มี spatialAnchor/);
+  assert.match(errors, /ไม่มี cinematicIntent/);
   assert.match(errors, /ต้องมี actionBeats/);
   assert.match(errors, /camera ไม่มี lensMm/);
 });
