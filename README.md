@@ -218,7 +218,7 @@ CLI จะทำงานตามลำดับดังนี้:
 | `00-brief.md` | Brief และข้อมูลพื้นฐานของคลิป |
 | `01-analysis.md` | ผลวิเคราะห์ ข้อมูลภาพ mood และ Core ที่เลือก |
 | `02-story.md` | โครงเรื่องที่ผ่านขั้น review |
-| `03-shots.md` | Production shot list พร้อม beat, geography, state, action, กล้อง, เสียง และ continuity |
+| `03-shots.md` | Production shot list พร้อม beat, geography, state, action, กล้อง, เสียง และ continuity โดยตรวจ state handoff และ action ซ้ำระหว่าง shot ที่ติดกัน |
 | `04-reference-image-prompts.md` | Prompt สำหรับ Character, Location และ Object references |
 | `05-generation-prompt.txt` | Generation prompt ฉบับรวม พร้อม Subject/Picture definitions และย่อหน้าราย shot ที่ระบุกล้อง geography ลำดับ action สีหน้า แสง เสียง บทพูด transition และ continuity |
 | `.shot-analysis/session.json` | สถานะและข้อมูล checkpoint สำหรับ `status` และ `resume` |

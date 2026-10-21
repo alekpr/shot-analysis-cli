@@ -14,10 +14,10 @@ function validShot(number, startTime, endTime) {
     subjects: ["Subject 1"],
     setting: "Room",
     spatialAnchor: "Subject 1 faces the door on frame right.",
-    startState: "Subject 1 stands beside the table.",
-    action: "Subject 1 moves toward the door.",
-    actionBeats: [{ order: 1, action: "Takes one step", result: "Reaches the door" }],
-    endState: "Subject 1 reaches the closed door.",
+    startState: number === 1 ? "Subject 1 stands beside the table." : `Subject 1 reaches mark ${number - 1}.`,
+    action: `Subject 1 moves toward mark ${number}.`,
+    actionBeats: [{ order: 1, action: `Takes step ${number}`, result: `Reaches mark ${number}` }],
+    endState: `Subject 1 reaches mark ${number}.`,
     camera: { lensMm: "35mm", shotSize: "medium", angle: "eye level", position: "left of the table", movement: "short track right", focus: "Subject 1" },
     composition: "Door remains visible frame right.",
     lighting: "Soft window light.",
@@ -71,6 +71,21 @@ test("rejects an underspecified production shot", () => {
   assert.match(errors, /ไม่มี spatialAnchor/);
   assert.match(errors, /ต้องมี actionBeats/);
   assert.match(errors, /camera ไม่มี lensMm/);
+});
+
+test("rejects reset states and repeated actions across adjacent shots", () => {
+  const first = validShot(1, 0, 5);
+  const second = validShot(2, 5, 10);
+  second.startState = "Subject 1 is back beside the table.";
+  second.actionBeats[0].action = first.actionBeats[0].action;
+  const errors = validateShots({
+    durationSeconds: 10,
+    totalDuration: 10,
+    continuityChecklist: ["Preserve motion"],
+    shots: [first, second]
+  }, 10).join("; ");
+  assert.match(errors, /startState ต้องตรงกับ Shot 1 endState/);
+  assert.match(errors, /action ซ้ำกับ Shot 1/);
 });
 
 test("validates final prompt section order", () => {

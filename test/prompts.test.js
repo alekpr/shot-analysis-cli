@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { finalPrompt, shotsPrompt } from "../src/prompts.js";
+import { finalPrompt, SHOT_LIST_FRAMEWORK, shotsPrompt, SYSTEM_PROMPT } from "../src/prompts.js";
 
 test("shot prompt requires production-level action, camera, sound, and continuity detail", () => {
   const prompt = shotsPrompt({ title: "Test", durationSeconds: 30 });
@@ -29,4 +29,10 @@ test("final prompt carries production shot details into generation", () => {
   assert.match(prompt, /micro-expression/);
   assert.match(prompt, /ภาพสุดท้าย/);
   assert.match(prompt, /sound bridge/);
+});
+
+test("shot and system prompts prevent motion resets and repeated actions", () => {
+  assert.match(SHOT_LIST_FRAMEWORK, /endState ของ shot ก่อนต้องเป็น startState ของ shot ถัดไปแบบคำต่อคำ/);
+  assert.match(SHOT_LIST_FRAMEWORK, /ห้ามย้อนกลับไปเริ่มเอื้อมมือใหม่/);
+  assert.match(SYSTEM_PROMPT, /ห้ามบรรยาย motion, action beat หรือบทพูดเดิมซ้ำ/);
 });

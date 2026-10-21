@@ -13,6 +13,20 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function normalizeComparison(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function visibleActions(shot) {
+  const beats = Array.isArray(shot?.actionBeats) ? shot.actionBeats : [];
+  const values = beats.length ? beats.map((beat) => beat.action) : [shot?.action];
+  return values.map(normalizeComparison).filter((value) => value.length >= 8);
+}
+
 export function normalizeFinalPrompt(value, prefix = "DY,", visualDirection) {
   let normalized = String(value || "")
     .replace(/^\uFEFF/, "")
@@ -116,6 +130,17 @@ export function validateShots(value, expectedDuration) {
     if (!Array.isArray(shot.continuityIn) || !Array.isArray(shot.continuityOut)) errors.push(`${shotLabel} ต้องมี continuityIn/continuityOut`);
     if (!shot.emotion?.start || !shot.emotion?.end || !shot.emotion?.visibleCue) errors.push(`${shotLabel} ต้องมี emotion start/end/visibleCue`);
     if (!Array.isArray(shot.negativeConstraints)) errors.push(`${shotLabel} ต้องมี negativeConstraints เป็น array`);
+    if (index > 0) {
+      const previous = shots[index - 1];
+      if (normalizeComparison(shot.startState) !== normalizeComparison(previous.endState)) {
+        errors.push(`${shotLabel} startState ต้องตรงกับ Shot ${index} endState เพื่อไม่ให้ motion หรือ state รีเซ็ต`);
+      }
+      const previousActions = new Set(visibleActions(previous));
+      const duplicatedActions = visibleActions(shot).filter((action) => previousActions.has(action));
+      if (duplicatedActions.length) {
+        errors.push(`${shotLabel} มี action ซ้ำกับ Shot ${index}: ${duplicatedActions.join(", ")}`);
+      }
+    }
     if (Number.isFinite(end)) expectedStart = end;
   });
   const target = Number(value.durationSeconds);
@@ -183,6 +208,14 @@ function shotBlock(value, number) {
   return detailed.slice(start, next < 0 ? undefined : next).trim();
 }
 
+function motionSentences(block) {
+  const motionWords = /\b(move|moves|moved|moving|reach|reaches|reached|reaching|turn|turns|turned|turning|walk|walks|walked|walking|run|runs|ran|running|raise|raises|raised|raising|lower|lowers|lowered|lowering|lift|lifts|lifted|lifting|withdraw|withdraws|withdrew|withdrawing|touch|touches|touched|touching|grab|grabs|grabbed|grabbing|release|releases|released|releasing|step|steps|stepped|stepping|open|opens|opened|opening|close|closes|closed|closing|fall|falls|fell|falling|sit|sits|sat|sitting|stand|stands|stood|standing)\b/i;
+  return block
+    .split(/(?<=[.!?])\s+/)
+    .map(normalizeComparison)
+    .filter((sentence) => sentence.length >= 45 && motionWords.test(sentence));
+}
+
 export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0, visualDirection, referenceAssets, shotList) {
   const errors = [];
   if (!value.trimStart().startsWith(`${prefix}subject_definitions:`)) {
@@ -206,6 +239,7 @@ export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0
     }
   }
   if (Array.isArray(shotList?.shots)) {
+    let previousMotionSentences = new Set();
     for (const shot of shotList.shots) {
       const block = shotBlock(value, Number(shot.number));
       if (!block) continue;
@@ -225,6 +259,10 @@ export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0
           errors.push(`[Shot ${shot.number}] ไม่มีบทพูดของ ${dialogue.speaker} ในรูปแบบ <d>[${language}] ...</d>`);
         }
       }
+      const currentMotionSentences = motionSentences(block);
+      const duplicates = currentMotionSentences.filter((sentence) => previousMotionSentences.has(sentence));
+      if (duplicates.length) errors.push(`[Shot ${shot.number}] บรรยาย motion ซ้ำกับ shot ก่อนหน้า`);
+      previousMotionSentences = new Set(currentMotionSentences);
     }
   }
   if (visualDirection?.label && !value.toLocaleLowerCase().includes(visualDirection.label.toLocaleLowerCase())) {
