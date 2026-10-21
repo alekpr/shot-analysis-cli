@@ -78,6 +78,24 @@ test("validates final prompt section order", () => {
   assert.deepEqual(validateFinalPrompt(prompt, "DY,", 2), []);
 });
 
+test("requires detailed shot prose to retain subjects, exact timing, and dialogue", () => {
+  const filler = " The camera and visible action continue with precise composition, lighting, performance, sound, continuity, and a clearly described final frame.".repeat(3);
+  const prompt = `DY,subject_definitions:\n<Subject 1> is a person.\nsummary:\nB\nretention_analysis:\nC\ndetailed_description:\n[Shot 1] <Subject 1> begins.${filler}\n[Shot 2] At 00:05.000 <Subject 1> speaks: <d>[English] Stay here.</d>${filler}\noverall_soundscape:\nE\nnon_diegetic_music:\nF`;
+  const shots = {
+    shots: [
+      { number: 1, startTime: 0, subjects: ["Subject 1"], dialogue: [] },
+      { number: 2, startTime: 5, subjects: ["Subject 1"], dialogue: [{ speaker: "Subject 1", language: "English", line: "Stay here." }] }
+    ]
+  };
+  assert.deepEqual(validateFinalPrompt(prompt, "DY,", 2, undefined, undefined, shots), []);
+
+  const incomplete = prompt.replace("At 00:05.000 <Subject 1> speaks: <d>[English] Stay here.</d>", "At 00:04.000 Someone speaks.");
+  const errors = validateFinalPrompt(incomplete, "DY,", 2, undefined, undefined, shots).join("; ");
+  assert.match(errors, /ต้องเริ่มเวลา At 00:05.000/);
+  assert.match(errors, /ไม่กล่าวถึง <Subject 1>/);
+  assert.match(errors, /ไม่มีบทพูด/);
+});
+
 test("rejects environment aliases and missing shot timestamps", () => {
   const prompt = `DY,subject_definitions:\n<Environment 1> is a room.\nsummary:\nB\nretention_analysis:\nC\ndetailed_description:\n[Shot 1]\n[Shot 2] (5s)\noverall_soundscape:\nE\nnon_diegetic_music:\nF`;
   assert.equal(validateFinalPrompt(prompt, "DY,", 2).length, 2);

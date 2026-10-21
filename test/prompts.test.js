@@ -25,4 +25,8 @@ test("final prompt carries production shot details into generation", () => {
   const prompt = finalPrompt({}, { shots: [] });
   assert.match(prompt, /spatialAnchor, startState, actionBeats/);
   assert.match(prompt, /continuityIn\/continuityOut/);
+  assert.match(prompt, /ย่อหน้า production prompt ภาษาอังกฤษแบบละเอียดและต่อเนื่อง/);
+  assert.match(prompt, /micro-expression/);
+  assert.match(prompt, /ภาพสุดท้าย/);
+  assert.match(prompt, /sound bridge/);
 });

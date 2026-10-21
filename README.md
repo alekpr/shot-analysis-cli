@@ -197,7 +197,7 @@ CLI จะทำงานตามลำดับดังนี้:
 5. สร้างโครงเรื่องให้ตรวจและอนุมัติ
 6. สร้าง shot list พร้อมตรวจเวลาและ continuity
 7. สร้าง prompt สำหรับ Character sheets, Locations และ Objects พร้อม Picture ID
-8. สร้าง generation prompt ฉบับสุดท้ายจากข้อมูลที่อนุมัติแล้ว
+8. สร้าง generation prompt ฉบับสุดท้ายจากข้อมูลที่อนุมัติแล้ว โดยเขียนแต่ละ shot เป็นย่อหน้า production prompt ภาษาอังกฤษแบบละเอียด
 
 ในหน้าเลือก Core ใช้ปุ่มลูกศรขึ้น/ลงเพื่อเลื่อน, `Space` เพื่อเลือกหรือยกเลิก และ `Enter` เพื่อยืนยัน รายการที่ LLM แนะนำจะแสดงด้านบนพร้อมเครื่องหมาย `★ แนะนำ` และสามารถเลือก `กำหนด Core เอง` ได้
 
@@ -220,7 +220,7 @@ CLI จะทำงานตามลำดับดังนี้:
 | `02-story.md` | โครงเรื่องที่ผ่านขั้น review |
 | `03-shots.md` | Production shot list พร้อม beat, geography, state, action, กล้อง, เสียง และ continuity |
 | `04-reference-image-prompts.md` | Prompt สำหรับ Character, Location และ Object references |
-| `05-generation-prompt.txt` | Generation prompt ฉบับสุดท้าย |
+| `05-generation-prompt.txt` | Generation prompt ฉบับรวม พร้อม Subject/Picture definitions และย่อหน้าราย shot ที่ระบุกล้อง geography ลำดับ action สีหน้า แสง เสียง บทพูด transition และ continuity |
 | `.shot-analysis/session.json` | สถานะและข้อมูล checkpoint สำหรับ `status` และ `resume` |
 
 หาก generation prompt ไม่ผ่าน validation ระบบอาจเก็บคำตอบล่าสุดไว้ที่ `05-generation-prompt.failed.txt` เพื่อช่วยตรวจสอบปัญหา
@@ -306,7 +306,7 @@ ls -l "$HOME/Desktop/My Clip Brief.md"
 
 ### Generation prompt ไม่ผ่านการตรวจ
 
-CLI จะพยายามแก้รูปแบบคำตอบจาก LLM ให้อัตโนมัติหนึ่งครั้ง หากยังไม่ผ่าน ระบบจะบันทึก checkpoint และไฟล์ `05-generation-prompt.failed.txt` จากนั้นสามารถเปลี่ยน model หรือ provider แล้วเรียก `shot-analysis resume <project-folder>` ได้
+CLI ตรวจว่าแต่ละ shot มี timestamp ตรงกับ shot list, กล่าวถึง Subject ที่อยู่ในฉาก, เก็บบทพูดในรูปแบบ `<d>[Language] ...</d>` และมีรายละเอียดเพียงพอสำหรับ production prompt หากไม่ผ่าน ระบบจะส่ง STORY, SHOTS และ reference assets ต้นฉบับกลับไปให้ LLM สร้างใหม่อัตโนมัติหนึ่งครั้ง หากยังไม่ผ่าน ระบบจะบันทึก checkpoint และไฟล์ `05-generation-prompt.failed.txt` จากนั้นสามารถเปลี่ยน model หรือ provider แล้วเรียก `shot-analysis resume <project-folder>` ได้
 
 ## พัฒนาและตรวจสอบโค้ด
 

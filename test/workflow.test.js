@@ -109,7 +109,8 @@ class FakeLlm {
         usageGuide: ["Generate each image and attach it with its assigned Picture ID."]
       });
     }
-    return "DY,subject_definitions:\n<Subject 1> is a woman in a Live-action cinematic style with a melancholic tone, matching <Picture 1>. The restaurant matches <Picture 2> and table matches <Picture 3>.\nsummary:\nVisual direction: Live-action cinematic; Mood: melancholic\nretention_analysis:\nUse <Picture 1>, <Picture 2>, and <Picture 3>.\ndetailed_description:\n[Shot 1] Start.\n[Shot 2] At 00:05.000 Continue.\n[Shot 3] At 00:10.000 End.\noverall_soundscape:\nE\nnon_diegetic_music:\nF";
+    const detail = " The 50mm medium camera holds at eye level across the same table while warm practical light shapes her face. Her controlled breathing, gaze, and precise hand movement show the emotional change; cloth movement and restaurant room tone remain synchronized. The camera completes its slow motivated push, preserves screen direction and wardrobe continuity, and ends on a clearly defined final position before a hard cut.";
+    return `DY,subject_definitions:\n<Subject 1> is a woman in a Live-action cinematic style with a melancholic tone, matching <Picture 1>. The restaurant matches <Picture 2> and table matches <Picture 3>.\nsummary:\nVisual direction: Live-action cinematic; Mood: melancholic\nretention_analysis:\nUse <Picture 1>, <Picture 2>, and <Picture 3>.\ndetailed_description:\n[Shot 1] <Subject 1> looks away.${detail}\n[Shot 2] At 00:05.000 <Subject 1> withdraws her hand.${detail}\n[Shot 3] At 00:10.000 <Subject 1> leaves.${detail}\noverall_soundscape:\nQuiet restaurant ambience.\nnon_diegetic_music:\nNone.`;
   }
 }
 

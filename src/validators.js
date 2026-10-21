@@ -1,3 +1,5 @@
+import { secondsToTime } from "./utils.js";
+
 const REQUIRED_FINAL_SECTIONS = [
   "subject_definitions:",
   "summary:",
@@ -170,7 +172,18 @@ export function validateReferencePrompts(value, existingReferenceLabels = []) {
   return errors;
 }
 
-export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0, visualDirection, referenceAssets) {
+function shotBlock(value, number) {
+  const detailedStart = value.indexOf("detailed_description:");
+  const detailedEnd = value.indexOf("overall_soundscape:");
+  if (detailedStart < 0) return "";
+  const detailed = value.slice(detailedStart, detailedEnd < 0 ? undefined : detailedEnd);
+  const start = detailed.indexOf(`[Shot ${number}]`);
+  if (start < 0) return "";
+  const next = detailed.indexOf(`[Shot ${number + 1}]`, start + 1);
+  return detailed.slice(start, next < 0 ? undefined : next).trim();
+}
+
+export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0, visualDirection, referenceAssets, shotList) {
   const errors = [];
   if (!value.trimStart().startsWith(`${prefix}subject_definitions:`)) {
     errors.push(`prompt ต้องเริ่มด้วย ${prefix}subject_definitions:`);
@@ -190,6 +203,28 @@ export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0
     if (number >= 2) {
       const timestamp = new RegExp(`\\[Shot ${number}\\]\\s+At\\s+\\d{2}:\\d{2}\\.\\d{3}`);
       if (!timestamp.test(value)) errors.push(`[Shot ${number}] ไม่มีเวลาเริ่มรูปแบบ At 00:00.000`);
+    }
+  }
+  if (Array.isArray(shotList?.shots)) {
+    for (const shot of shotList.shots) {
+      const block = shotBlock(value, Number(shot.number));
+      if (!block) continue;
+      if (block.length < 300) errors.push(`[Shot ${shot.number}] มีรายละเอียดสั้นเกินไปสำหรับ production prompt`);
+      if (Number(shot.number) >= 2) {
+        const expectedTimestamp = secondsToTime(shot.startTime);
+        if (!block.startsWith(`[Shot ${shot.number}] At ${expectedTimestamp}`)) {
+          errors.push(`[Shot ${shot.number}] ต้องเริ่มเวลา At ${expectedTimestamp}`);
+        }
+      }
+      for (const subject of shot.subjects || []) {
+        if (!block.includes(`<${subject}>`)) errors.push(`[Shot ${shot.number}] ไม่กล่าวถึง <${subject}>`);
+      }
+      for (const dialogue of shot.dialogue || []) {
+        const language = dialogue.language || "English";
+        if (!block.includes(`<d>[${language}] ${dialogue.line}</d>`)) {
+          errors.push(`[Shot ${shot.number}] ไม่มีบทพูดของ ${dialogue.speaker} ในรูปแบบ <d>[${language}] ...</d>`);
+        }
+      }
     }
   }
   if (visualDirection?.label && !value.toLocaleLowerCase().includes(visualDirection.label.toLocaleLowerCase())) {

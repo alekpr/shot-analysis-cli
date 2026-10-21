@@ -321,16 +321,17 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
 
   console.log("กำลังสร้าง generation prompt ฉบับสุดท้าย...");
   const prefix = settings.promptPrefix ?? "DY,";
-  let generated = normalizeFinalPrompt(await trackFailure(outputFolder, state, () => llm.generate({ system: SYSTEM_PROMPT, prompt: finalPrompt(story, shots, prefix, selectedVisualDirection, referencePrompts), temperature: 0.2 })), prefix, selectedVisualDirection);
+  const finalPromptRequest = finalPrompt(story, shots, prefix, selectedVisualDirection, referencePrompts);
+  let generated = normalizeFinalPrompt(await trackFailure(outputFolder, state, () => llm.generate({ system: SYSTEM_PROMPT, prompt: finalPromptRequest, temperature: 0.2 })), prefix, selectedVisualDirection);
   const expectedShotCount = shots.shots.length;
-  let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts);
+  let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts, shots);
   if (errors.length) {
     generated = normalizeFinalPrompt(await trackFailure(outputFolder, state, () => llm.generate({
       system: SYSTEM_PROMPT,
-      prompt: `แก้ prompt ให้ผ่านข้อกำหนด: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วยตัวอักษร ${prefix}subject_definitions: ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\n${generated}`,
+      prompt: `สร้าง prompt ใหม่ให้ครบจากข้อมูลต้นฉบับและแก้ข้อผิดพลาดต่อไปนี้: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วยตัวอักษร ${prefix}subject_definitions: ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\nคำสั่งและข้อมูลต้นฉบับ:\n${finalPromptRequest}\n\nคำตอบก่อนหน้าที่ไม่ผ่าน:\n${generated}`,
       temperature: 0.1
     })), prefix, selectedVisualDirection);
-    errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts);
+    errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts, shots);
   }
   if (errors.length) {
     const error = new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
@@ -487,20 +488,21 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
     if (state.status === "generating-prompt") {
       console.log("กำลังสร้าง generation prompt ต่อจาก checkpoint...");
       const prefix = settings.promptPrefix ?? "DY,";
+      const finalPromptRequest = finalPrompt(state.story, state.shots, prefix, selectedVisualDirection, state.referencePrompts);
       let generated = normalizeFinalPrompt(await llm.generate({
         system: SYSTEM_PROMPT,
-        prompt: finalPrompt(state.story, state.shots, prefix, selectedVisualDirection, state.referencePrompts),
+        prompt: finalPromptRequest,
         temperature: 0.2
       }), prefix, selectedVisualDirection);
       const expectedShotCount = state.shots.shots.length;
-      let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts);
+      let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts, state.shots);
       if (errors.length) {
         generated = normalizeFinalPrompt(await llm.generate({
           system: SYSTEM_PROMPT,
-          prompt: `แก้ prompt ให้ผ่านข้อกำหนด: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วยตัวอักษร ${prefix}subject_definitions: ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\n${generated}`,
+          prompt: `สร้าง prompt ใหม่ให้ครบจากข้อมูลต้นฉบับและแก้ข้อผิดพลาดต่อไปนี้: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วยตัวอักษร ${prefix}subject_definitions: ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\nคำสั่งและข้อมูลต้นฉบับ:\n${finalPromptRequest}\n\nคำตอบก่อนหน้าที่ไม่ผ่าน:\n${generated}`,
           temperature: 0.1
         }), prefix, selectedVisualDirection);
-        errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts);
+        errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts, state.shots);
       }
       if (errors.length) {
         await saveText(path.join(outputFolder, "05-generation-prompt.failed.txt"), generated);
