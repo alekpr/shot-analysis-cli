@@ -329,14 +329,14 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
   const finalPromptRequest = finalPrompt(story, shots, prefix, selectedVisualDirection, referencePrompts);
   let generated = normalizeFinalPrompt(await trackFailure(outputFolder, state, () => llm.generate({ system: SYSTEM_PROMPT, prompt: finalPromptRequest, temperature: 0.2 })), prefix, selectedVisualDirection);
   const expectedShotCount = shots.shots.length;
-  let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts, shots);
+  let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts, shots, story);
   if (errors.length) {
     generated = normalizeFinalPrompt(await trackFailure(outputFolder, state, () => llm.generate({
       system: SYSTEM_PROMPT,
       prompt: `สร้าง prompt ใหม่ให้ครบจากข้อมูลต้นฉบับและแก้ข้อผิดพลาดต่อไปนี้: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วยตัวอักษร ${prefix}subject_definitions: ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\nคำสั่งและข้อมูลต้นฉบับ:\n${finalPromptRequest}\n\nคำตอบก่อนหน้าที่ไม่ผ่าน:\n${generated}`,
       temperature: 0.1
     })), prefix, selectedVisualDirection);
-    errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts, shots);
+    errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts, shots, story);
   }
   if (errors.length) {
     const error = new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
@@ -507,14 +507,14 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
         temperature: 0.2
       }), prefix, selectedVisualDirection);
       const expectedShotCount = state.shots.shots.length;
-      let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts, state.shots);
+      let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts, state.shots, state.story);
       if (errors.length) {
         generated = normalizeFinalPrompt(await llm.generate({
           system: SYSTEM_PROMPT,
           prompt: `สร้าง prompt ใหม่ให้ครบจากข้อมูลต้นฉบับและแก้ข้อผิดพลาดต่อไปนี้: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วยตัวอักษร ${prefix}subject_definitions: ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\nคำสั่งและข้อมูลต้นฉบับ:\n${finalPromptRequest}\n\nคำตอบก่อนหน้าที่ไม่ผ่าน:\n${generated}`,
           temperature: 0.1
         }), prefix, selectedVisualDirection);
-        errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts, state.shots);
+        errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts, state.shots, state.story);
       }
       if (errors.length) {
         await saveText(path.join(outputFolder, "05-generation-prompt.failed.txt"), generated);

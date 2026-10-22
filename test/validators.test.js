@@ -15,11 +15,14 @@ function validShot(number, startTime, endTime) {
     attentionFocus: "The eye sees Subject 1 first, then discovers the closed door.",
     visualPayoff: `Subject 1 reaches mark ${number} in the final frame.`,
     subjects: ["Subject 1"],
+    offscreenSubjects: [],
     setting: "Room",
     spatialAnchor: "Subject 1 faces the door on frame right.",
     startState: number === 1 ? "Subject 1 stands beside the table." : `Subject 1 reaches mark ${number - 1}.`,
+    continuityBridge: number === 1 ? "Initial state" : `The cut continues after reaching mark ${number - 1}.`,
+    causalLink: `The previous position motivates movement toward mark ${number}, setting up the next mark.`,
     action: `Subject 1 moves toward mark ${number}.`,
-    actionBeats: [{ order: 1, action: `Takes step ${number}`, result: `Reaches mark ${number}` }],
+    actionBeats: [{ order: 1, startOffset: 0.5, endOffset: 2, action: `Takes step ${number}`, result: `Reaches mark ${number}` }],
     endState: `Subject 1 reaches mark ${number}.`,
     camera: { lensMm: "35mm", shotSize: "medium", angle: "eye level", position: "left of the table", movement: "short track right", focus: "Subject 1" },
     composition: "Door remains visible frame right.",
@@ -87,10 +90,10 @@ test("rejects an underspecified production shot", () => {
   assert.match(errors, /camera ไม่มี lensMm/);
 });
 
-test("rejects reset states and repeated actions across adjacent shots", () => {
+test("rejects missing continuity bridges and repeated actions across adjacent shots", () => {
   const first = validShot(1, 0, 5);
   const second = validShot(2, 5, 10);
-  second.startState = "Subject 1 is back beside the table.";
+  second.continuityBridge = "";
   second.actionBeats[0].action = first.actionBeats[0].action;
   const errors = validateShots({
     durationSeconds: 10,
@@ -98,8 +101,19 @@ test("rejects reset states and repeated actions across adjacent shots", () => {
     continuityChecklist: ["Preserve motion"],
     shots: [first, second]
   }, 10).join("; ");
-  assert.match(errors, /startState ต้องตรงกับ Shot 1 endState/);
+  assert.match(errors, /ไม่มี continuityBridge จาก shot ก่อนหน้า/);
   assert.match(errors, /action ซ้ำกับ Shot 1/);
+});
+
+test("rejects overlapping or out-of-range action timing", () => {
+  const shot = validShot(1, 0, 5);
+  shot.actionBeats = [
+    { order: 1, startOffset: 0.5, endOffset: 3, action: "Raises hand", result: "Hand is raised" },
+    { order: 2, startOffset: 2.5, endOffset: 6, action: "Opens door", result: "Door opens" }
+  ];
+  const errors = validateShots({ durationSeconds: 5, totalDuration: 5, continuityChecklist: ["Keep state"], shots: [shot] }, 5).join("; ");
+  assert.match(errors, /ช่วงเวลาไม่ถูกต้อง/);
+  assert.match(errors, /ซ้อนกับ beat ก่อนหน้า/);
 });
 
 test("validates final prompt section order", () => {
@@ -142,6 +156,35 @@ test("normalizes common model formatting around the final prompt", () => {
   assert.match(normalized, /^summary:/m);
   assert.match(normalized, /^retention_analysis:/m);
   assert.deepEqual(validateFinalPrompt(normalized, "DY,", 1), []);
+});
+
+test("removes and rejects a duplicate subject definitions heading", () => {
+  const raw = `DY,subject_definitions:\nsubject_definitions:\n<Subject 1> is a room.\nsummary:\nB\nretention_analysis:\nC\ndetailed_description:\n[Shot 1] Start.\noverall_soundscape:\nE\nnon_diegetic_music:\nF`;
+  assert.match(validateFinalPrompt(raw, "DY,", 1).join("; "), /subject_definitions: ซ้ำ/);
+  const normalized = normalizeFinalPrompt(raw, "DY,");
+  assert.equal((normalized.match(/^subject_definitions:/gm) || []).length, 0);
+  assert.deepEqual(validateFinalPrompt(normalized, "DY,", 1), []);
+});
+
+test("rejects characters used in a final shot without visible or offscreen declaration", () => {
+  const filler = " The camera holds while the action, lighting, sound, emotion, and final frame remain clearly described for production.".repeat(4);
+  const prompt = `DY,subject_definitions:\n<Subject 1> is A.\n<Subject 2> is B.\nsummary:\nB\nretention_analysis:\nC\ndetailed_description:\n[Shot 1] <Subject 1> watches <Subject 2> move.${filler}\noverall_soundscape:\nE\nnon_diegetic_music:\nF`;
+  const shotList = { shots: [{ number: 1, startTime: 0, subjects: ["Subject 1"], offscreenSubjects: [], dialogue: [] }] };
+  const story = { characters: [{ id: "Subject 1" }, { id: "Subject 2" }] };
+  assert.match(validateFinalPrompt(prompt, "DY,", 1, undefined, undefined, shotList, story).join("; "), /กล่าวถึง <Subject 2>/);
+});
+
+test("requires one object key for each object reference asset", () => {
+  const value = {
+    globalStyle: { visualDirection: "Live action" },
+    existingReferences: [],
+    assets: [
+      { pictureId: "Picture 1", assetType: "character", prompt: "Character sheet", negativePrompt: "text", usedInShots: [1] },
+      { pictureId: "Picture 2", assetType: "location", prompt: "Empty location", negativePrompt: "people", usedInShots: [1] },
+      { pictureId: "Picture 3", assetType: "object", prompt: "Rifle and chicken", negativePrompt: "people", usedInShots: [1] }
+    ]
+  };
+  assert.match(validateReferencePrompts(value).join("; "), /ต้องมี objectKey/);
 });
 
 test("adds the configured prefix when the model starts at subject_definitions", () => {

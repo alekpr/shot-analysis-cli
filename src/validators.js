@@ -41,6 +41,8 @@ export function normalizeFinalPrompt(value, prefix = "DY,", visualDirection) {
   if (match) {
     normalized = normalized.slice(match.index);
     normalized = normalized.replace(firstSection, `${prefix}subject_definitions:`);
+    const duplicateSubjectHeading = new RegExp(`^${escapedPrefix}subject_definitions:\\s*\\r?\\n\\s*subject_definitions\\s*:\\s*`, "i");
+    normalized = normalized.replace(duplicateSubjectHeading, `${prefix}subject_definitions:\n`);
   }
 
   for (const section of REQUIRED_FINAL_SECTIONS.slice(1)) {
@@ -115,7 +117,7 @@ export function validateShots(value, expectedDuration, expectedShotCount) {
       if (!(end > start)) errors.push(`${shotLabel} มีช่วงเวลาไม่ถูกต้อง`);
       if (Math.abs(end - start - duration) > 0.02) errors.push(`${shotLabel} duration ไม่ตรงกับ start/end`);
     }
-    for (const key of ["beat", "storyPhase", "objective", "cinematicIntent", "attentionFocus", "visualPayoff", "setting", "spatialAnchor", "startState", "action", "endState", "composition", "lighting"]) {
+    for (const key of ["beat", "storyPhase", "objective", "cinematicIntent", "attentionFocus", "visualPayoff", "setting", "spatialAnchor", "startState", "causalLink", "action", "endState", "composition", "lighting"]) {
       if (!String(shot[key] || "").trim()) errors.push(`${shotLabel} ไม่มี ${key}`);
     }
     if (shot.storyPhase && !["hook", "setup", "escalation", "turn", "climax", "resolution", "tease"].includes(shot.storyPhase)) {
@@ -123,12 +125,26 @@ export function validateShots(value, expectedDuration, expectedShotCount) {
     }
     if (index === 0 && shot.storyPhase !== "hook") errors.push("Shot 1 ต้องมี storyPhase เป็น hook");
     if (!Array.isArray(shot.subjects)) errors.push(`${shotLabel} ต้องมี subjects เป็น array`);
+    if (!Array.isArray(shot.offscreenSubjects)) errors.push(`${shotLabel} ต้องมี offscreenSubjects เป็น array`);
+    const visibleSubjects = new Set(shot.subjects || []);
+    for (const subject of shot.offscreenSubjects || []) {
+      if (visibleSubjects.has(subject)) errors.push(`${shotLabel} ระบุ ${subject} ซ้ำทั้ง subjects และ offscreenSubjects`);
+    }
+    if (index > 0 && !String(shot.continuityBridge || "").trim()) errors.push(`${shotLabel} ไม่มี continuityBridge จาก shot ก่อนหน้า`);
     if (!Array.isArray(shot.actionBeats) || shot.actionBeats.length === 0) {
       errors.push(`${shotLabel} ต้องมี actionBeats`);
     } else {
       shot.actionBeats.forEach((beat, beatIndex) => {
         if (Number(beat.order) !== beatIndex + 1 || !beat.action || !beat.result) {
           errors.push(`${shotLabel} actionBeats ต้องเรียง order และมี action/result`);
+        }
+        const beatStart = Number(beat.startOffset);
+        const beatEnd = Number(beat.endOffset);
+        if (![beatStart, beatEnd].every(Number.isFinite) || beatStart < 0 || beatEnd <= beatStart || beatEnd > duration) {
+          errors.push(`${shotLabel} action beat ${beatIndex + 1} มีช่วงเวลาไม่ถูกต้อง`);
+        }
+        if (beatIndex > 0 && beatStart < Number(shot.actionBeats[beatIndex - 1].endOffset) - 0.01) {
+          errors.push(`${shotLabel} action beat ${beatIndex + 1} ซ้อนกับ beat ก่อนหน้า`);
         }
       });
     }
@@ -142,9 +158,6 @@ export function validateShots(value, expectedDuration, expectedShotCount) {
     if (!Array.isArray(shot.negativeConstraints)) errors.push(`${shotLabel} ต้องมี negativeConstraints เป็น array`);
     if (index > 0) {
       const previous = shots[index - 1];
-      if (normalizeComparison(shot.startState) !== normalizeComparison(previous.endState)) {
-        errors.push(`${shotLabel} startState ต้องตรงกับ Shot ${index} endState เพื่อไม่ให้ motion หรือ state รีเซ็ต`);
-      }
       const previousActions = new Set(visibleActions(previous));
       const duplicatedActions = visibleActions(shot).filter((action) => previousActions.has(action));
       if (duplicatedActions.length) {
@@ -187,6 +200,7 @@ export function validateReferencePrompts(value, existingReferenceLabels = []) {
     if (!returnedExisting.has(expected)) errors.push(`existingReferences ไม่มี ${expected}`);
   }
   const seen = new Set();
+  const objectKeys = new Set();
   let hasCharacter = false;
   let hasLocation = false;
   value.assets.forEach((asset, index) => {
@@ -204,6 +218,12 @@ export function validateReferencePrompts(value, existingReferenceLabels = []) {
     if (!Array.isArray(asset.usedInShots)) errors.push(`${label || `asset ${index + 1}`} ต้องมี usedInShots`);
     if (asset.assetType === "character") hasCharacter = true;
     if (asset.assetType === "location") hasLocation = true;
+    if (asset.assetType === "object") {
+      const objectKey = normalizeComparison(asset.objectKey);
+      if (!objectKey) errors.push(`${label || `asset ${index + 1}`} ต้องมี objectKey สำหรับวัตถุหลักเพียงชนิดเดียว`);
+      if (objectKey && objectKeys.has(objectKey)) errors.push(`${label} มี objectKey ซ้ำ ${asset.objectKey}`);
+      if (objectKey) objectKeys.add(objectKey);
+    }
   });
   if (!hasCharacter) errors.push("reference prompts ต้องมี character sheet อย่างน้อย 1 รายการ");
   if (!hasLocation) errors.push("reference prompts ต้องมี location อย่างน้อย 1 รายการ");
@@ -229,7 +249,7 @@ function motionSentences(block) {
     .filter((sentence) => sentence.length >= 45 && motionWords.test(sentence));
 }
 
-export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0, visualDirection, referenceAssets, shotList) {
+export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0, visualDirection, referenceAssets, shotList, story) {
   const errors = [];
   if (!value.trimStart().startsWith(`${prefix}subject_definitions:`)) {
     errors.push(`prompt ต้องเริ่มด้วย ${prefix}subject_definitions:`);
@@ -240,6 +260,10 @@ export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0
     if (index < 0) errors.push(`prompt ไม่มี ${section}`);
     if (index >= 0 && index < previous) errors.push(`ลำดับ ${section} ไม่ถูกต้อง`);
     if (index >= 0) previous = index;
+    const name = section.slice(0, -1);
+    const prefixPattern = name === "subject_definitions" ? `(?:${escapeRegExp(prefix)}\\s*)?` : "";
+    const occurrences = value.match(new RegExp(`^\\s*${prefixPattern}${name}\\s*:`, "gim")) || [];
+    if (occurrences.length > 1) errors.push(`prompt มี ${section} ซ้ำ`);
   }
   if (/<Environment\s+\d+>/i.test(value)) {
     errors.push("ต้องนิยามสภาพแวดล้อมเป็น <Subject N> ห้ามใช้ <Environment N>");
@@ -253,6 +277,7 @@ export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0
   }
   if (Array.isArray(shotList?.shots)) {
     let previousMotionSentences = new Set();
+    const characterIds = new Set((story?.characters || []).map((character) => String(character.id || "").trim()).filter(Boolean));
     for (const shot of shotList.shots) {
       const block = shotBlock(value, Number(shot.number));
       if (!block) continue;
@@ -265,6 +290,13 @@ export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0
       }
       for (const subject of shot.subjects || []) {
         if (!block.includes(`<${subject}>`)) errors.push(`[Shot ${shot.number}] ไม่กล่าวถึง <${subject}>`);
+      }
+      const allowedCharacters = new Set([...(shot.subjects || []), ...(shot.offscreenSubjects || [])]);
+      const mentionedCharacters = [...block.matchAll(/<((?:Subject)\s+\d+)>/gi)].map((match) => match[1]);
+      for (const subject of new Set(mentionedCharacters)) {
+        if (characterIds.has(subject) && !allowedCharacters.has(subject)) {
+          errors.push(`[Shot ${shot.number}] กล่าวถึง <${subject}> แต่ไม่ได้ระบุใน subjects หรือ offscreenSubjects`);
+        }
       }
       for (const dialogue of shot.dialogue || []) {
         const language = dialogue.language || "English";

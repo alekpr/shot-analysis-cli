@@ -18,11 +18,14 @@ function fakeShot({ number, startTime, endTime, objective, action, composition, 
     attentionFocus: "The viewer notices Subject 1 first, then the exit on frame right.",
     visualPayoff: `The final frame resolves ${objective}.`,
     subjects: ["Subject 1"],
+    offscreenSubjects: [],
     setting: "restaurant",
     spatialAnchor: "Subject 1 remains beside the same table; the exit is frame right.",
     startState: number === 1 ? "Initial state" : `State leaving shot ${number - 1}`,
+    continuityBridge: number === 1 ? "Initial state" : `The new framing continues from shot ${number - 1}.`,
+    causalLink: `The prior beat causes ${objective} and sets up the next beat.`,
     action,
-    actionBeats: [{ order: 1, action, result: `Visible result of ${action}` }],
+    actionBeats: [{ order: 1, startOffset: 0.5, endOffset: Math.min(2.5, endTime - startTime), action, result: `Visible result of ${action}` }],
     endState: `State leaving shot ${number}`,
     camera: { lensMm: "50mm", shotSize: "medium", angle: "eye level", position: "across the table", movement: "slow push motivated by emotion", focus: "Subject 1's face" },
     composition,
@@ -108,7 +111,7 @@ class FakeLlm {
         assets: [
           { pictureId: "Picture 1", assetType: "character", name: "A character sheet", linkedSubjects: ["Subject 1"], usedInShots: [1, 2, 3], purpose: "character consistency", prompt: "Character sheet of A with front, side, and back views.", negativePrompt: "other characters, text", consistencyNotes: ["same coat"] },
           { pictureId: "Picture 2", assetType: "location", name: "Restaurant", linkedSubjects: [], usedInShots: [1, 2, 3], purpose: "location consistency", prompt: "Empty warm restaurant environment reference.", negativePrompt: "people, text", consistencyNotes: ["same table layout"] },
-          { pictureId: "Picture 3", assetType: "object", name: "Table", linkedSubjects: [], usedInShots: [1, 2], purpose: "prop continuity", prompt: "Isolated restaurant table from multiple angles.", negativePrompt: "people, food", consistencyNotes: ["dark wood"] }
+          { pictureId: "Picture 3", assetType: "object", objectKey: "restaurant-table", name: "Table", linkedSubjects: [], usedInShots: [1, 2], purpose: "prop continuity", prompt: "Isolated restaurant table from multiple angles.", negativePrompt: "people, food", consistencyNotes: ["dark wood"] }
         ],
         usageGuide: ["Generate each image and attach it with its assigned Picture ID."]
       });
