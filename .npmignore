@@ -1,0 +1,13 @@
+node_modules/
+.DS_Store
+.env
+.env.*
+!.env.example
+**/.shot-analysis/
+shot-projects/
+tmp/
+*.log
+/เด็กช่วยหมา/
+/เด็กช่วยหมา.zip
+/zero-to-hero-ocr.md
+agent-reference/

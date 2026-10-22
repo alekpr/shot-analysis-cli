@@ -39,6 +39,15 @@ test("final prompt carries production shot details into generation", () => {
   assert.match(prompt, /sound bridge/);
 });
 
+test("Seedance target uses reference mapping and timecoded beats", () => {
+  const prompt = finalPrompt({}, { shots: [] }, "DY,", {}, {}, "seedance-2.5");
+  assert.match(prompt, /Seedance 2\.5/);
+  assert.match(prompt, /REFERENCE_MAPPING:/);
+  assert.match(prompt, /TIMECODED_BEATS:/);
+  assert.match(prompt, /GLOBAL_CONSTRAINTS:/);
+  assert.doesNotMatch(prompt, /บรรทัดแรกต้องเริ่มด้วย DY,subject_definitions/);
+});
+
 test("shot and system prompts prevent motion resets and repeated actions", () => {
   assert.match(SHOT_LIST_FRAMEWORK, /startState และ endState ต้องอธิบายเฉพาะสิ่งที่มองเห็น/);
   assert.match(SHOT_LIST_FRAMEWORK, /ห้ามย้อนกลับไปเริ่มเอื้อมมือใหม่/);

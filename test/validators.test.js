@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeFinalPrompt, validateFinalPrompt, validateReferencePrompts, validateShots } from "../src/validators.js";
+import { normalizeFinalPrompt, normalizeSeedancePrompt, validateFinalPrompt, validateReferencePrompts, validateSeedancePrompt, validateShots } from "../src/validators.js";
 
 function validShot(number, startTime, endTime) {
   return {
@@ -203,6 +203,17 @@ test("adds canonical visual direction metadata when the model translates the lab
   assert.match(normalized, /Visual direction: ภาพยนตร์สมจริง \(Live-action cinematic\)/);
   assert.match(normalized, /Mood: warm and hopeful/);
   assert.deepEqual(validateFinalPrompt(normalized, "DY,", 1, visualDirection), []);
+});
+
+test("normalizes and validates a Seedance 2.5 production prompt", () => {
+  const detail = " The 50mm medium camera stays at eye level across the table while warm practical light shapes <Subject 1>'s face. The visible hand movement follows the approved action in one continuous phase, with cloth movement and room tone synchronized. Screen direction, wardrobe, prop state, and geography remain stable, and the final frame holds long enough to show the emotional result before the motivated hard cut.";
+  const raw = `\`\`\`text\nREFERENCE_MAPPING:\n@Image1 = <Picture 1> character identity reference\nSEQUENCE_SPECIFICATION:\nVisual direction: Live-action cinematic\nMood: melancholic\nTIMECODED_BEATS:\n[Beat 1] 00:00.000-00:05.000 <Subject 1> looks away.${detail}\n[Beat 2] 00:05.000-00:10.000 <Subject 1> withdraws her hand.${detail}\nGLOBAL_CONSTRAINTS:\nPreserve identity, wardrobe, geography, physics, lighting, and synchronized audio.\n\`\`\``;
+  const visualDirection = { label: "Live-action cinematic", mood: "melancholic" };
+  const normalized = normalizeSeedancePrompt(raw, visualDirection);
+  const shots = { shots: [validShot(1, 0, 5), validShot(2, 5, 10)] };
+  const references = { assets: [{ pictureId: "Picture 1" }] };
+  assert.ok(normalized.startsWith("REFERENCE_MAPPING:"));
+  assert.deepEqual(validateSeedancePrompt(normalized, 2, visualDirection, references, shots), []);
 });
 
 test("validates character and location reference prompts with unique picture IDs", () => {

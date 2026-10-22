@@ -9,6 +9,13 @@ const REQUIRED_FINAL_SECTIONS = [
   "non_diegetic_music:"
 ];
 
+const REQUIRED_SEEDANCE_SECTIONS = [
+  "REFERENCE_MAPPING:",
+  "SEQUENCE_SPECIFICATION:",
+  "TIMECODED_BEATS:",
+  "GLOBAL_CONSTRAINTS:"
+];
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -63,6 +70,42 @@ export function normalizeFinalPrompt(value, prefix = "DY,", visualDirection) {
     normalized = normalized.replace(/^summary:[ \t]*(?:\r?\n)?/m, `summary:\n${metadata.join("\n")}\n`);
   }
   return normalized.trim();
+}
+
+export function normalizeSeedancePrompt(value, visualDirection) {
+  let normalized = String(value || "")
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .replace(/^```(?:text|plaintext|markdown)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
+  const firstSection = /REFERENCE_MAPPING\s*:/i;
+  const match = firstSection.exec(normalized);
+  if (match) normalized = normalized.slice(match.index);
+  for (const section of REQUIRED_SEEDANCE_SECTIONS) {
+    const name = section.slice(0, -1);
+    const heading = new RegExp(`^\\s*(?:#{1,6}\\s*)?(?:\\*{1,2})?${name}(?:\\*{1,2})?\\s*:`, "gim");
+    normalized = normalized.replace(heading, section);
+  }
+  const metadata = ["Generator target: Seedance 2.5"];
+  const normalizedLower = normalized.toLocaleLowerCase();
+  if (visualDirection?.label && !normalizedLower.includes(visualDirection.label.toLocaleLowerCase())) {
+    metadata.push(`Visual direction: ${visualDirection.label}`);
+  }
+  if (visualDirection?.mood && !normalizedLower.includes(visualDirection.mood.toLocaleLowerCase())) {
+    metadata.push(`Mood: ${visualDirection.mood}`);
+  }
+  const missing = metadata.filter((item) => !normalizedLower.includes(item.toLocaleLowerCase()));
+  if (missing.length) {
+    normalized = normalized.replace(/^SEQUENCE_SPECIFICATION:[ \t]*(?:\r?\n)?/m, `SEQUENCE_SPECIFICATION:\n${missing.join("\n")}\n`);
+  }
+  return normalized.trim();
+}
+
+export function normalizeGenerationPrompt(value, generationTarget = "minimax-h3", prefix = "DY,", visualDirection) {
+  return generationTarget === "seedance-2.5"
+    ? normalizeSeedancePrompt(value, visualDirection)
+    : normalizeFinalPrompt(value, prefix, visualDirection);
 }
 
 export function validateAnalysis(value) {
@@ -323,5 +366,78 @@ export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0
   for (const pictureId of pictureIds) {
     if (!value.includes(`<${pictureId}>`)) errors.push(`prompt ไม่มี <${pictureId}> จาก reference assets`);
   }
+  if (/\[cite\s*:/i.test(value)) errors.push("prompt มี citation marker ที่ไม่ควรส่งให้ video generator");
   return errors;
+}
+
+function seedanceBeatBlock(value, number) {
+  const sectionStart = value.indexOf("TIMECODED_BEATS:");
+  const sectionEnd = value.indexOf("GLOBAL_CONSTRAINTS:");
+  if (sectionStart < 0) return "";
+  const section = value.slice(sectionStart, sectionEnd < 0 ? undefined : sectionEnd);
+  const start = section.indexOf(`[Beat ${number}]`);
+  if (start < 0) return "";
+  const next = section.indexOf(`[Beat ${number + 1}]`, start + 1);
+  return section.slice(start, next < 0 ? undefined : next).trim();
+}
+
+export function validateSeedancePrompt(value, expectedShotCount = 0, visualDirection, referenceAssets, shotList) {
+  const errors = [];
+  if (!value.trimStart().startsWith("REFERENCE_MAPPING:")) errors.push("prompt ต้องเริ่มด้วย REFERENCE_MAPPING:");
+  let previous = -1;
+  for (const section of REQUIRED_SEEDANCE_SECTIONS) {
+    const index = value.indexOf(section);
+    if (index < 0) errors.push(`prompt ไม่มี ${section}`);
+    if (index >= 0 && index < previous) errors.push(`ลำดับ ${section} ไม่ถูกต้อง`);
+    if (index >= 0) previous = index;
+    const occurrences = value.match(new RegExp(`^\\s*${section}`, "gim")) || [];
+    if (occurrences.length > 1) errors.push(`prompt มี ${section} ซ้ำ`);
+  }
+  if (!/Generator target:\s*Seedance 2\.5/i.test(value)) errors.push("prompt ไม่มี Generator target: Seedance 2.5");
+  if (visualDirection?.label && !value.toLocaleLowerCase().includes(visualDirection.label.toLocaleLowerCase())) {
+    errors.push(`prompt ไม่มี Visual direction: ${visualDirection.label}`);
+  }
+  if (visualDirection?.mood && !value.toLocaleLowerCase().includes(visualDirection.mood.toLocaleLowerCase())) {
+    errors.push(`prompt ไม่มี Mood: ${visualDirection.mood}`);
+  }
+  const pictureIds = [
+    ...(referenceAssets?.existingReferences || []).map((item) => item.pictureId),
+    ...(referenceAssets?.assets || []).map((item) => item.pictureId)
+  ].filter(Boolean);
+  for (const pictureId of pictureIds) {
+    const number = String(pictureId).match(/Picture\s+(\d+)/i)?.[1];
+    if (!number || !value.includes(`@Image${number}`) || !value.includes(`<${pictureId}>`)) {
+      errors.push(`prompt ไม่มี mapping @Image${number || "?"} = <${pictureId}>`);
+    }
+  }
+  for (let number = 1; number <= expectedShotCount; number += 1) {
+    if (!value.includes(`[Beat ${number}]`)) errors.push(`prompt ไม่มี [Beat ${number}]`);
+  }
+  if (Array.isArray(shotList?.shots)) {
+    for (const shot of shotList.shots) {
+      const block = seedanceBeatBlock(value, Number(shot.number));
+      if (!block) continue;
+      const expectedRange = `[Beat ${shot.number}] ${secondsToTime(shot.startTime)}-${secondsToTime(shot.endTime)}`;
+      if (!block.startsWith(expectedRange)) errors.push(`[Beat ${shot.number}] ต้องเริ่มด้วย ${expectedRange}`);
+      if (block.length < 300) errors.push(`[Beat ${shot.number}] มีรายละเอียดสั้นเกินไปสำหรับ production prompt`);
+      for (const subject of shot.subjects || []) {
+        if (!block.includes(`<${subject}>`)) errors.push(`[Beat ${shot.number}] ไม่กล่าวถึง <${subject}>`);
+      }
+      for (const dialogue of shot.dialogue || []) {
+        const language = dialogue.language || "English";
+        if (!block.includes(`<d>[${language}] ${dialogue.line}</d>`)) {
+          errors.push(`[Beat ${shot.number}] ไม่มีบทพูดของ ${dialogue.speaker} ในรูปแบบ <d>[${language}] ...</d>`);
+        }
+      }
+    }
+  }
+  if (/\[cite\s*:/i.test(value)) errors.push("prompt มี citation marker ที่ไม่ควรส่งให้ video generator");
+  if (/DY,subject_definitions:/i.test(value)) errors.push("Seedance prompt ต้องไม่ใช้โครงสร้าง DY,subject_definitions");
+  return errors;
+}
+
+export function validateGenerationPrompt(value, generationTarget = "minimax-h3", prefix = "DY,", expectedShotCount = 0, visualDirection, referenceAssets, shotList, story) {
+  return generationTarget === "seedance-2.5"
+    ? validateSeedancePrompt(value, expectedShotCount, visualDirection, referenceAssets, shotList, story)
+    : validateFinalPrompt(value, prefix, expectedShotCount, visualDirection, referenceAssets, shotList, story);
 }

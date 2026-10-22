@@ -1,13 +1,18 @@
 import path from "node:path";
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { extractJson, resolveOutputPath, slugify } from "./utils.js";
-import { analysisPrompt, finalPrompt, referencePromptsPrompt, shotsPrompt, storyPrompt, SYSTEM_PROMPT } from "./prompts.js";
+import { analysisPrompt, finalPrompt, generationSystemPrompt, referencePromptsPrompt, shotsPrompt, storyPrompt, SYSTEM_PROMPT } from "./prompts.js";
 import { renderAnalysis, renderReferencePrompts, renderShots, renderStory } from "./render.js";
 import { selectStoryCores } from "./cores.js";
 import { resolveVisualDirection } from "./visual-direction.js";
-import { normalizeFinalPrompt, validateAnalysis, validateFinalPrompt, validateReferencePrompts, validateShots, validateStory } from "./validators.js";
+import { normalizeGenerationPrompt, validateAnalysis, validateGenerationPrompt, validateReferencePrompts, validateShots, validateStory } from "./validators.js";
 import { loadBriefFile } from "./brief.js";
 import { parseShotCountPreference, selectShotCount } from "./shot-count.js";
+import { generationTargetLabel, selectGenerationTarget } from "./generation-target.js";
+
+function requiredPromptOpening(generationTarget, prefix) {
+  return generationTarget === "seedance-2.5" ? "REFERENCE_MAPPING:" : `${prefix}subject_definitions:`;
+}
 
 async function saveText(target, content) {
   await writeFile(target, content.endsWith("\n") ? content : `${content}\n`, "utf8");
@@ -321,22 +326,27 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
     await checkpoint(outputFolder, state, "reference-prompts-review");
   });
   state.referencePrompts = referencePrompts;
-  await checkpoint(outputFolder, state, referencePromptsApproved ? "generating-prompt" : "reference-prompts-review");
+  await checkpoint(outputFolder, state, referencePromptsApproved ? "generation-target-selection" : "reference-prompts-review");
   if (!referencePromptsApproved) return { outputFolder, status: state.status };
 
+  const generationTarget = await selectGenerationTarget(terminal, state.generationTarget);
+  state.generationTarget = generationTarget;
+  await checkpoint(outputFolder, state, "generating-prompt");
+  console.log(`โมเดลปลายทาง: ${generationTargetLabel(generationTarget)}`);
   console.log("กำลังสร้าง generation prompt ฉบับสุดท้าย...");
   const prefix = settings.promptPrefix ?? "DY,";
-  const finalPromptRequest = finalPrompt(story, shots, prefix, selectedVisualDirection, referencePrompts);
-  let generated = normalizeFinalPrompt(await trackFailure(outputFolder, state, () => llm.generate({ system: SYSTEM_PROMPT, prompt: finalPromptRequest, temperature: 0.2 })), prefix, selectedVisualDirection);
+  const finalPromptRequest = finalPrompt(story, shots, prefix, selectedVisualDirection, referencePrompts, generationTarget);
+  const systemPrompt = generationSystemPrompt(generationTarget);
+  let generated = normalizeGenerationPrompt(await trackFailure(outputFolder, state, () => llm.generate({ system: systemPrompt, prompt: finalPromptRequest, temperature: 0.2 })), generationTarget, prefix, selectedVisualDirection);
   const expectedShotCount = shots.shots.length;
-  let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts, shots, story);
+  let errors = validateGenerationPrompt(generated, generationTarget, prefix, expectedShotCount, selectedVisualDirection, referencePrompts, shots, story);
   if (errors.length) {
-    generated = normalizeFinalPrompt(await trackFailure(outputFolder, state, () => llm.generate({
-      system: SYSTEM_PROMPT,
-      prompt: `สร้าง prompt ใหม่ให้ครบจากข้อมูลต้นฉบับและแก้ข้อผิดพลาดต่อไปนี้: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วยตัวอักษร ${prefix}subject_definitions: ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\nคำสั่งและข้อมูลต้นฉบับ:\n${finalPromptRequest}\n\nคำตอบก่อนหน้าที่ไม่ผ่าน:\n${generated}`,
+    generated = normalizeGenerationPrompt(await trackFailure(outputFolder, state, () => llm.generate({
+      system: systemPrompt,
+      prompt: `สร้าง prompt ใหม่ให้ครบจากข้อมูลต้นฉบับและแก้ข้อผิดพลาดต่อไปนี้: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วย ${requiredPromptOpening(generationTarget, prefix)} ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\nคำสั่งและข้อมูลต้นฉบับ:\n${finalPromptRequest}\n\nคำตอบก่อนหน้าที่ไม่ผ่าน:\n${generated}`,
       temperature: 0.1
-    })), prefix, selectedVisualDirection);
-    errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, referencePrompts, shots, story);
+    })), generationTarget, prefix, selectedVisualDirection);
+    errors = validateGenerationPrompt(generated, generationTarget, prefix, expectedShotCount, selectedVisualDirection, referencePrompts, shots, story);
   }
   if (errors.length) {
     const error = new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
@@ -493,28 +503,33 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
         await checkpoint(outputFolder, state, "reference-prompts-review");
       });
       state.referencePrompts = referencePrompts;
-      await checkpoint(outputFolder, state, approved ? "generating-prompt" : "reference-prompts-review");
+      await checkpoint(outputFolder, state, approved ? "generation-target-selection" : "reference-prompts-review");
       if (!approved) return { outputFolder, status: state.status };
     }
 
-    if (state.status === "generating-prompt") {
+    if (["generation-target-selection", "generating-prompt"].includes(state.status)) {
+      const generationTarget = await selectGenerationTarget(terminal, state.generationTarget);
+      state.generationTarget = generationTarget;
+      await checkpoint(outputFolder, state, "generating-prompt");
+      console.log(`โมเดลปลายทาง: ${generationTargetLabel(generationTarget)}`);
       console.log("กำลังสร้าง generation prompt ต่อจาก checkpoint...");
       const prefix = settings.promptPrefix ?? "DY,";
-      const finalPromptRequest = finalPrompt(state.story, state.shots, prefix, selectedVisualDirection, state.referencePrompts);
-      let generated = normalizeFinalPrompt(await llm.generate({
-        system: SYSTEM_PROMPT,
+      const finalPromptRequest = finalPrompt(state.story, state.shots, prefix, selectedVisualDirection, state.referencePrompts, generationTarget);
+      const systemPrompt = generationSystemPrompt(generationTarget);
+      let generated = normalizeGenerationPrompt(await llm.generate({
+        system: systemPrompt,
         prompt: finalPromptRequest,
         temperature: 0.2
-      }), prefix, selectedVisualDirection);
+      }), generationTarget, prefix, selectedVisualDirection);
       const expectedShotCount = state.shots.shots.length;
-      let errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts, state.shots, state.story);
+      let errors = validateGenerationPrompt(generated, generationTarget, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts, state.shots, state.story);
       if (errors.length) {
-        generated = normalizeFinalPrompt(await llm.generate({
-          system: SYSTEM_PROMPT,
-          prompt: `สร้าง prompt ใหม่ให้ครบจากข้อมูลต้นฉบับและแก้ข้อผิดพลาดต่อไปนี้: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วยตัวอักษร ${prefix}subject_definitions: ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\nคำสั่งและข้อมูลต้นฉบับ:\n${finalPromptRequest}\n\nคำตอบก่อนหน้าที่ไม่ผ่าน:\n${generated}`,
+        generated = normalizeGenerationPrompt(await llm.generate({
+          system: systemPrompt,
+          prompt: `สร้าง prompt ใหม่ให้ครบจากข้อมูลต้นฉบับและแก้ข้อผิดพลาดต่อไปนี้: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วย ${requiredPromptOpening(generationTarget, prefix)} ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\nคำสั่งและข้อมูลต้นฉบับ:\n${finalPromptRequest}\n\nคำตอบก่อนหน้าที่ไม่ผ่าน:\n${generated}`,
           temperature: 0.1
-        }), prefix, selectedVisualDirection);
-        errors = validateFinalPrompt(generated, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts, state.shots, state.story);
+        }), generationTarget, prefix, selectedVisualDirection);
+        errors = validateGenerationPrompt(generated, generationTarget, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts, state.shots, state.story);
       }
       if (errors.length) {
         await saveText(path.join(outputFolder, "05-generation-prompt.failed.txt"), generated);

@@ -147,6 +147,14 @@ class CountingLlm extends FakeLlm {
   }
 }
 
+class SeedanceLlm extends FakeLlm {
+  async generate(options) {
+    if (!options.prompt.includes("production prompt ภาษาอังกฤษก้อนเดียวสำหรับ Seedance 2.5")) return super.generate(options);
+    const detail = " The 50mm medium camera remains at eye level across the same table while warm practical light shapes <Subject 1>'s face. Her controlled breathing, gaze, and precise hand movement communicate the emotional change; cloth movement and restaurant room tone stay synchronized. The camera completes one motivated slow push, preserves screen direction, wardrobe, geography, and prop continuity, and ends on a clearly readable final position before the motivated hard cut.";
+    return `REFERENCE_MAPPING:\n@Image1 = <Picture 1> character identity and wardrobe reference\n@Image2 = <Picture 2> restaurant geography and lighting reference\n@Image3 = <Picture 3> table material and prop-state reference\nSEQUENCE_SPECIFICATION:\nGenerator target: Seedance 2.5\nVisual direction: Live-action cinematic\nMood: melancholic\nDuration: 15 seconds; aspect ratio 9:16.\nTIMECODED_BEATS:\n[Beat 1] 00:00.000-00:05.000 <Subject 1> looks away.${detail}\n[Beat 2] 00:05.000-00:10.000 <Subject 1> withdraws her hand.${detail}\n[Beat 3] 00:10.000-00:15.000 <Subject 1> leaves.${detail}\nGLOBAL_CONSTRAINTS:\nPreserve character identity, anatomy, wardrobe, prop ownership, location geography, screen direction, lighting, physics, dialogue, synchronized audio, and every approved continuity state. No subtitles, logos, watermarks, UI, additional characters, events, or props.`;
+  }
+}
+
 test("generateJson regenerates from the original prompt after repeated malformed JSON", async () => {
   const responses = [
     '{"title":"broken"',
@@ -251,6 +259,34 @@ test("workflow reads brief from a file without asking for multiline input", asyn
   const session = JSON.parse(await readFile(path.join(output, ".shot-analysis/session.json"), "utf8"));
   assert.equal(session.input.brief, brief);
   assert.equal(session.input.briefFile, briefFile);
+});
+
+test("workflow lets the user select Seedance 2.5 and stores the target for resume", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-seedance-test-"));
+  const asks = ["Seedance Test", "15", "", "Reels", "9:16", ""];
+  const terminal = {
+    ask: async () => asks.shift() ?? "",
+    multiline: async () => "A quiet breakup in a restaurant.",
+    multiSelect: async () => ["pure-love"],
+    choose: async (question) => {
+      if (question.includes("brief")) return "text";
+      if (question.includes("โมเดลปลายทาง")) return "s";
+      return "a";
+    }
+  };
+  const result = await runNewWorkflow({
+    terminal,
+    llm: new SeedanceLlm(),
+    args: { output: root },
+    settings: { provider: "gemini", model: "test", promptPrefix: "DY," }
+  });
+  assert.equal(result.status, "complete");
+  const session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
+  assert.equal(session.generationTarget, "seedance-2.5");
+  const prompt = await readFile(path.join(root, "05-generation-prompt.txt"), "utf8");
+  assert.ok(prompt.startsWith("REFERENCE_MAPPING:"));
+  assert.match(prompt, /Generator target: Seedance 2\.5/);
+  assert.doesNotMatch(prompt, /DY,subject_definitions:/);
 });
 
 test("resume retries only the failed final prompt stage", async () => {
