@@ -216,6 +216,13 @@ Storyboard prompt จะกำหนด grid จากจำนวน shot โ�
 
 ระบบอนุญาตให้ขอแก้เอกสารแต่ละขั้นได้สูงสุด 6 รอบ
 
+ในขั้น review Storyboard จะมีตัวเลือกเพิ่ม:
+
+- `แก้เฉพาะ Storyboard prompt` เมื่อแก้การเลือก keyframe, grid หรือ composition โดยไม่เปลี่ยนตัวละคร สถานที่ และวัตถุอ้างอิง
+- `แก้ Image References แล้วสร้าง Storyboard ใหม่` เมื่อแก้รูปลักษณ์ เสื้อผ้า prop location หรือรายละเอียดของภาพอ้างอิง ระบบจะสร้าง `04-reference-image-prompts.md` ฉบับใหม่ให้ตรวจ จากนั้นสร้าง Storyboard ใหม่และส่ง Reference Assets ฉบับล่าสุดต่อไปยัง final generation prompt
+
+หากหยุดระหว่างตรวจ Image References ฉบับแก้ไข `resume` จะกลับมาที่การตรวจ reference ก่อนสร้าง Storyboard ใหม่ จึงไม่ใช้ข้อมูลคนละเวอร์ชันในขั้นถัดไป
+
 ## ไฟล์ผลลัพธ์
 
 ไฟล์จะถูกสร้างในโฟลเดอร์ที่เลือก:

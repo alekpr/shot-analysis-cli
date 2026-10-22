@@ -180,6 +180,30 @@ async function reviewDocument(terminal, label, file, regenerate) {
   throw new Error(`แก้ไข ${label} เกินจำนวนรอบที่กำหนด กรุณาเริ่มใหม่จากไฟล์ที่บันทึกไว้`);
 }
 
+async function reviewStoryboardDocument(terminal, file, { regenerateStoryboard, reviseReferences }) {
+  for (let round = 0; round < 6; round += 1) {
+    console.log(`\nสร้าง storyboard key image prompt แล้ว: ${file}`);
+    const action = await terminal.choose("ตรวจ storyboard key image prompt แล้วเลือกขั้นตอนต่อไป", [
+      { key: "a", label: "อนุมัติ" },
+      { key: "r", label: "แก้เฉพาะ Storyboard prompt" },
+      { key: "i", label: "แก้ Image References แล้วสร้าง Storyboard ใหม่" },
+      { key: "q", label: "หยุดและบันทึกไว้" }
+    ], "a");
+    if (action === "a") return true;
+    if (action === "q") return false;
+    if (action === "i") {
+      const notes = await terminal.multiline("ระบุรายละเอียด Image References ที่ต้องการแก้");
+      const referencesApproved = await reviseReferences(notes);
+      if (!referencesApproved) return false;
+      await regenerateStoryboard(`สร้างใหม่จาก Image References ฉบับล่าสุดหลังแก้ไข: ${notes}`);
+      continue;
+    }
+    const notes = await terminal.multiline("ระบุสิ่งที่ต้องการแก้เฉพาะ Storyboard prompt");
+    await regenerateStoryboard(notes);
+  }
+  throw new Error("แก้ไข storyboard key image prompt เกินจำนวนรอบที่กำหนด กรุณา resume จากไฟล์ที่บันทึกไว้");
+}
+
 export async function runNewWorkflow({ terminal, llm, args, settings }) {
   let briefFilePath = args.brief || args["brief-file"] || "";
   if (!briefFilePath) {
@@ -340,7 +364,7 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
   await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
   state.storyboardPrompt = storyboard;
   await checkpoint(outputFolder, state, "storyboard-prompt-review");
-  const storyboardApproved = await reviewDocument(terminal, "storyboard key image prompt", storyboardFile, async (notes) => {
+  const regenerateStoryboard = async (notes) => {
     storyboard = await trackFailure(outputFolder, state, () => generateJson(
       llm,
       storyboardPrompt(story, shots, referencePrompts, aspectRatio, notes),
@@ -350,10 +374,43 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
     await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
     state.storyboardPrompt = storyboard;
     await checkpoint(outputFolder, state, "storyboard-prompt-review");
-  });
+  };
+  const reviseReferences = async (notes) => {
+    referencePrompts = await trackFailure(outputFolder, state, () => generateJson(
+      llm,
+      referencePromptsPrompt(story, shots, existingReferences, `ปรับ Image References จากการ review Storyboard: ${notes}`),
+      (value) => validateReferencePrompts(value, existingReferenceLabels),
+      "reference image prompts"
+    ));
+    await saveText(referencePromptsFile, renderReferencePrompts(referencePrompts));
+    state.referencePrompts = referencePrompts;
+    state.storyboardPrompt = undefined;
+    await checkpoint(outputFolder, state, "reference-prompts-review");
+    const approved = await reviewDocument(terminal, "reference image prompts ฉบับแก้ไข", referencePromptsFile, async (revisionNotes) => {
+      referencePrompts = await trackFailure(outputFolder, state, () => generateJson(
+        llm,
+        referencePromptsPrompt(story, shots, existingReferences, `${notes}\nแก้เพิ่มเติม: ${revisionNotes}`),
+        (value) => validateReferencePrompts(value, existingReferenceLabels),
+        "reference image prompts"
+      ));
+      await saveText(referencePromptsFile, renderReferencePrompts(referencePrompts));
+      state.referencePrompts = referencePrompts;
+      await checkpoint(outputFolder, state, "reference-prompts-review");
+    });
+    state.referencePrompts = referencePrompts;
+    await checkpoint(outputFolder, state, approved ? "storyboard-prompt-generation" : "reference-prompts-review");
+    return approved;
+  };
+  const storyboardApproved = await reviewStoryboardDocument(terminal, storyboardFile, { regenerateStoryboard, reviseReferences });
+  if (!storyboardApproved) {
+    if (state.status !== "reference-prompts-review") {
+      state.storyboardPrompt = storyboard;
+      await checkpoint(outputFolder, state, "storyboard-prompt-review");
+    }
+    return { outputFolder, status: state.status };
+  }
   state.storyboardPrompt = storyboard;
-  await checkpoint(outputFolder, state, storyboardApproved ? "generation-target-selection" : "storyboard-prompt-review");
-  if (!storyboardApproved) return { outputFolder, status: state.status };
+  await checkpoint(outputFolder, state, "generation-target-selection");
 
   const generationTarget = await selectGenerationTarget(terminal, state.generationTarget);
   state.generationTarget = generationTarget;
@@ -548,7 +605,7 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
         await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
         await checkpoint(outputFolder, state, "storyboard-prompt-review");
       }
-      const approved = await reviewDocument(terminal, "storyboard key image prompt", storyboardFile, async (notes) => {
+      const regenerateStoryboard = async (notes) => {
         storyboard = await generateJson(
           llm,
           storyboardPrompt(state.story, state.shots, state.referencePrompts, input.aspectRatio, notes),
@@ -558,10 +615,46 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
         state.storyboardPrompt = storyboard;
         await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
         await checkpoint(outputFolder, state, "storyboard-prompt-review");
-      });
+      };
+      const reviseReferences = async (notes) => {
+        const existingReferences = normalizeExistingReferences(analysis, input.references);
+        const existingReferenceLabels = existingReferences.map((item) => item.pictureId);
+        let referencePrompts = await generateJson(
+          llm,
+          referencePromptsPrompt(state.story, state.shots, existingReferences, `ปรับ Image References จากการ review Storyboard: ${notes}`),
+          (value) => validateReferencePrompts(value, existingReferenceLabels),
+          "reference image prompts"
+        );
+        const referencePromptsFile = path.join(outputFolder, "04-reference-image-prompts.md");
+        await saveText(referencePromptsFile, renderReferencePrompts(referencePrompts));
+        state.referencePrompts = referencePrompts;
+        state.storyboardPrompt = undefined;
+        await checkpoint(outputFolder, state, "reference-prompts-review");
+        const approved = await reviewDocument(terminal, "reference image prompts ฉบับแก้ไข", referencePromptsFile, async (revisionNotes) => {
+          referencePrompts = await generateJson(
+            llm,
+            referencePromptsPrompt(state.story, state.shots, existingReferences, `${notes}\nแก้เพิ่มเติม: ${revisionNotes}`),
+            (value) => validateReferencePrompts(value, existingReferenceLabels),
+            "reference image prompts"
+          );
+          state.referencePrompts = referencePrompts;
+          await saveText(referencePromptsFile, renderReferencePrompts(referencePrompts));
+          await checkpoint(outputFolder, state, "reference-prompts-review");
+        });
+        state.referencePrompts = referencePrompts;
+        await checkpoint(outputFolder, state, approved ? "storyboard-prompt-generation" : "reference-prompts-review");
+        return approved;
+      };
+      const approved = await reviewStoryboardDocument(terminal, storyboardFile, { regenerateStoryboard, reviseReferences });
+      if (!approved) {
+        if (state.status !== "reference-prompts-review") {
+          state.storyboardPrompt = storyboard;
+          await checkpoint(outputFolder, state, "storyboard-prompt-review");
+        }
+        return { outputFolder, status: state.status };
+      }
       state.storyboardPrompt = storyboard;
-      await checkpoint(outputFolder, state, approved ? "generation-target-selection" : "storyboard-prompt-review");
-      if (!approved) return { outputFolder, status: state.status };
+      await checkpoint(outputFolder, state, "generation-target-selection");
     }
 
     if (["generation-target-selection", "generating-prompt"].includes(state.status)) {

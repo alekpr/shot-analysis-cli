@@ -177,6 +177,25 @@ class CountingLlm extends FakeLlm {
   }
 }
 
+class ReferenceRevisionLlm extends FakeLlm {
+  constructor() {
+    super();
+    this.calls = [];
+  }
+
+  async generate(options) {
+    this.calls.push(options.prompt);
+    const response = await super.generate(options);
+    if (options.prompt.includes("สร้าง prompt ภาษาอังกฤษสำหรับ generate ภาพอ้างอิง") && options.prompt.includes("ปรับ Image References จากการ review Storyboard")) {
+      const value = JSON.parse(response);
+      value.assets[0].prompt = "UPDATED_BLUE_COAT character sheet with front, side, and back views.";
+      value.assets[0].consistencyNotes = ["UPDATED_BLUE_COAT must remain identical in every shot"];
+      return JSON.stringify(value);
+    }
+    return response;
+  }
+}
+
 class SeedanceLlm extends FakeLlm {
   async generate(options) {
     if (!options.prompt.includes("production prompt ภาษาอังกฤษก้อนเดียวสำหรับ Seedance 2.5")) return super.generate(options);
@@ -318,6 +337,47 @@ test("workflow lets the user select Seedance 2.5 and stores the target for resum
   assert.ok(prompt.startsWith("REFERENCE_MAPPING:"));
   assert.match(prompt, /Generator target: Seedance 2\.5/);
   assert.doesNotMatch(prompt, /DY,subject_definitions:/);
+});
+
+test("storyboard review can revise image references and propagate the latest version", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-reference-revision-test-"));
+  const asks = ["Reference Revision", "15", "", "Reels", "9:16", ""];
+  let storyboardReviews = 0;
+  const terminal = {
+    ask: async () => asks.shift() ?? "",
+    multiline: async (question) => question.includes("Image References")
+      ? "Change the character coat to blue in every reference."
+      : "A quiet breakup in a restaurant.",
+    multiSelect: async () => ["pure-love"],
+    choose: async (question) => {
+      if (question.includes("brief")) return "text";
+      if (question.includes("storyboard key image prompt")) {
+        storyboardReviews += 1;
+        return storyboardReviews === 1 ? "i" : "a";
+      }
+      if (question.includes("โมเดลปลายทาง")) return "m";
+      return "a";
+    }
+  };
+  const llm = new ReferenceRevisionLlm();
+  const result = await runNewWorkflow({
+    terminal,
+    llm,
+    args: { output: root },
+    settings: { provider: "gemini", model: "test", promptPrefix: "DY," }
+  });
+  assert.equal(result.status, "complete");
+  const referenceCalls = llm.calls.filter((prompt) => prompt.includes("สร้าง prompt ภาษาอังกฤษสำหรับ generate ภาพอ้างอิง"));
+  const storyboardCalls = llm.calls.filter((prompt) => prompt.includes("storyboard key image แบบ contact sheet"));
+  const finalCall = llm.calls.findLast((prompt) => prompt.includes("สร้าง prompt ภาษาอังกฤษตามโครงสร้างตัวอย่าง"));
+  assert.equal(referenceCalls.length, 2);
+  assert.equal(storyboardCalls.length, 2);
+  assert.match(storyboardCalls[1], /UPDATED_BLUE_COAT/);
+  assert.match(finalCall, /UPDATED_BLUE_COAT/);
+  const savedReferences = await readFile(path.join(root, "04-reference-image-prompts.md"), "utf8");
+  assert.match(savedReferences, /UPDATED_BLUE_COAT/);
+  const session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
+  assert.match(session.referencePrompts.assets[0].prompt, /UPDATED_BLUE_COAT/);
 });
 
 test("resume retries only the failed final prompt stage", async () => {
