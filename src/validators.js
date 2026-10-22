@@ -273,6 +273,53 @@ export function validateReferencePrompts(value, existingReferenceLabels = []) {
   return errors;
 }
 
+export function validateStoryboardPrompt(value, shotList, referenceAssets, expectedAspectRatio) {
+  const errors = [];
+  const shots = shotList?.shots || [];
+  if (!value || typeof value !== "object") return ["storyboard prompt ต้องเป็น object"];
+  if (Number(value.shotCount) !== shots.length) errors.push(`storyboard prompt มี shotCount ${value.shotCount} แต่ shot list มี ${shots.length}`);
+  if (!Array.isArray(value.panels) || value.panels.length !== shots.length) {
+    errors.push(`storyboard prompt ต้องมี ${shots.length} panels`);
+  }
+  if (!Number.isInteger(Number(value.grid?.columns)) || !Number.isInteger(Number(value.grid?.rows))) errors.push("storyboard prompt ไม่มี grid columns/rows ที่ถูกต้อง");
+  if (expectedAspectRatio && value.grid?.panelAspectRatio !== expectedAspectRatio) errors.push(`storyboard panelAspectRatio ต้องเป็น ${expectedAspectRatio}`);
+  const allowedPictures = new Set([
+    ...(referenceAssets?.existingReferences || []).map((item) => item.pictureId),
+    ...(referenceAssets?.assets || []).map((item) => item.pictureId)
+  ].filter(Boolean));
+  const mappedPictures = new Set((value.referenceMapping || []).map((item) => item.pictureId));
+  for (const pictureId of allowedPictures) {
+    if (!mappedPictures.has(pictureId)) errors.push(`storyboard referenceMapping ไม่มี ${pictureId}`);
+  }
+  (value.panels || []).forEach((panel, index) => {
+    const shot = shots[index];
+    const label = `Storyboard panel ${index + 1}`;
+    if (Number(panel.shotNumber) !== index + 1) errors.push(`${label} มี shotNumber ไม่ต่อเนื่อง`);
+    if (shot) {
+      const expectedRange = `${secondsToTime(shot.startTime)}-${secondsToTime(shot.endTime)}`;
+      if (panel.timeRange !== expectedRange) errors.push(`${label} timeRange ต้องเป็น ${expectedRange}`);
+      const visible = new Set(shot.subjects || []);
+      for (const subject of panel.subjects || []) {
+        if (!visible.has(subject)) errors.push(`${label} ใช้ ${subject} ที่ไม่อยู่ใน subjects ของ Shot ${shot.number}`);
+      }
+    }
+    for (const key of ["keyframeMoment", "camera", "composition", "prompt"]) {
+      if (!String(panel[key] || "").trim()) errors.push(`${label} ไม่มี ${key}`);
+    }
+    if (!Array.isArray(panel.subjects) || !Array.isArray(panel.referencePictures) || !Array.isArray(panel.continuityNotes) || !Array.isArray(panel.negativeConstraints)) {
+      errors.push(`${label} ต้องมี subjects/referencePictures/continuityNotes/negativeConstraints เป็น array`);
+    }
+    for (const pictureId of panel.referencePictures || []) {
+      if (!allowedPictures.has(pictureId)) errors.push(`${label} ใช้ Picture ID ที่ไม่มีใน reference assets: ${pictureId}`);
+    }
+  });
+  if (String(value.masterPrompt || "").trim().length < 500) errors.push("storyboard masterPrompt สั้นเกินไป");
+  if (!String(value.negativePrompt || "").trim()) errors.push("storyboard prompt ไม่มี negativePrompt");
+  if (!Array.isArray(value.usageGuide) || value.usageGuide.length === 0) errors.push("storyboard prompt ไม่มี usageGuide");
+  if (/\[cite\s*:/i.test(`${value.masterPrompt || ""} ${value.negativePrompt || ""}`)) errors.push("storyboard prompt มี citation marker");
+  return errors;
+}
+
 function shotBlock(value, number) {
   const detailedStart = value.indexOf("detailed_description:");
   const detailedEnd = value.indexOf("overall_soundscape:");

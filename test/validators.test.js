@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeFinalPrompt, normalizeSeedancePrompt, validateFinalPrompt, validateReferencePrompts, validateSeedancePrompt, validateShots } from "../src/validators.js";
+import { normalizeFinalPrompt, normalizeSeedancePrompt, validateFinalPrompt, validateReferencePrompts, validateSeedancePrompt, validateShots, validateStoryboardPrompt } from "../src/validators.js";
 
 function validShot(number, startTime, endTime) {
   return {
@@ -214,6 +214,35 @@ test("normalizes and validates a Seedance 2.5 production prompt", () => {
   const references = { assets: [{ pictureId: "Picture 1" }] };
   assert.ok(normalized.startsWith("REFERENCE_MAPPING:"));
   assert.deepEqual(validateSeedancePrompt(normalized, 2, visualDirection, references, shots), []);
+});
+
+test("validates storyboard panel count, timing, subjects, and references", () => {
+  const shots = { shots: [validShot(1, 0, 5), validShot(2, 5, 10)] };
+  const references = { assets: [{ pictureId: "Picture 1" }] };
+  const panel = (number, range) => ({
+    shotNumber: number,
+    timeRange: range,
+    keyframeMoment: `Moment ${number}`,
+    subjects: ["Subject 1"],
+    referencePictures: ["Picture 1"],
+    camera: "50mm medium eye-level",
+    composition: "clear foreground and background",
+    prompt: "A complete cinematic still-image prompt.",
+    continuityNotes: ["same wardrobe"],
+    negativeConstraints: ["no extra people"]
+  });
+  const value = {
+    shotCount: 2,
+    grid: { columns: 2, rows: 1, panelAspectRatio: "9:16" },
+    referenceMapping: [{ pictureId: "Picture 1", usage: "character" }],
+    panels: [panel(1, "00:00.000-00:05.000"), panel(2, "00:05.000-00:10.000")],
+    masterPrompt: "Create one two-panel cinematic storyboard contact sheet with equal frames, clean gutters, consistent character identity, wardrobe, geography, lighting, screen direction, props, anatomy, palette, and realistic materials. The first panel captures the approved opening keyframe and the second panel captures the approved resolving keyframe. Every panel contains one still moment only, preserves the source camera and composition, uses the supplied reference image, and avoids repeated actions or multiple time phases. Keep the artwork free from all text, labels, captions, logos, watermarks, interfaces, speech bubbles, extra subjects, duplicate limbs, and inconsistent environmental details.",
+    negativePrompt: "text, watermark, duplicate people",
+    usageGuide: ["Generate as one image"]
+  };
+  assert.deepEqual(validateStoryboardPrompt(value, shots, references, "9:16"), []);
+  value.panels[1].subjects = ["Subject 2"];
+  assert.match(validateStoryboardPrompt(value, shots, references, "9:16").join("; "), /Subject 2/);
 });
 
 test("validates character and location reference prompts with unique picture IDs", () => {

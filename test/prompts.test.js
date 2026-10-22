@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { finalPrompt, SHOT_LIST_FRAMEWORK, shotsPrompt, SYSTEM_PROMPT } from "../src/prompts.js";
+import { finalPrompt, SHOT_LIST_FRAMEWORK, shotsPrompt, storyboardPrompt, SYSTEM_PROMPT } from "../src/prompts.js";
 
 test("shot prompt requires production-level action, camera, sound, and continuity detail", () => {
   const prompt = shotsPrompt({ title: "Test", durationSeconds: 30 });
@@ -46,6 +46,16 @@ test("Seedance target uses reference mapping and timecoded beats", () => {
   assert.match(prompt, /TIMECODED_BEATS:/);
   assert.match(prompt, /GLOBAL_CONSTRAINTS:/);
   assert.doesNotMatch(prompt, /บรรทัดแรกต้องเริ่มด้วย DY,subject_definitions/);
+});
+
+test("storyboard prompt requests one still panel per shot in one contact sheet", () => {
+  const prompt = storyboardPrompt({}, { shots: [{}, {}, {}, {}, {}, {}, {}, {}] }, {}, "9:16");
+  assert.match(prompt, /storyboard key image แบบ contact sheet/);
+  assert.match(prompt, /"columns":4/);
+  assert.match(prompt, /"rows":2/);
+  assert.match(prompt, /still keyframe เพียงหนึ่งขณะ/);
+  assert.match(prompt, /หนึ่งภาพ/);
+  assert.match(prompt, /ห้ามสร้าง title, subtitle/);
 });
 
 test("shot and system prompts prevent motion resets and repeated actions", () => {

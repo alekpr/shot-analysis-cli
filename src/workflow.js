@@ -1,11 +1,11 @@
 import path from "node:path";
 import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { extractJson, resolveOutputPath, slugify } from "./utils.js";
-import { analysisPrompt, finalPrompt, generationSystemPrompt, referencePromptsPrompt, shotsPrompt, storyPrompt, SYSTEM_PROMPT } from "./prompts.js";
-import { renderAnalysis, renderReferencePrompts, renderShots, renderStory } from "./render.js";
+import { analysisPrompt, finalPrompt, generationSystemPrompt, referencePromptsPrompt, shotsPrompt, storyboardPrompt, storyPrompt, SYSTEM_PROMPT } from "./prompts.js";
+import { renderAnalysis, renderReferencePrompts, renderShots, renderStoryboardPrompt, renderStory } from "./render.js";
 import { selectStoryCores } from "./cores.js";
 import { resolveVisualDirection } from "./visual-direction.js";
-import { normalizeGenerationPrompt, validateAnalysis, validateGenerationPrompt, validateReferencePrompts, validateShots, validateStory } from "./validators.js";
+import { normalizeGenerationPrompt, validateAnalysis, validateGenerationPrompt, validateReferencePrompts, validateShots, validateStoryboardPrompt, validateStory } from "./validators.js";
 import { loadBriefFile } from "./brief.js";
 import { parseShotCountPreference, selectShotCount } from "./shot-count.js";
 import { generationTargetLabel, selectGenerationTarget } from "./generation-target.js";
@@ -326,8 +326,34 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
     await checkpoint(outputFolder, state, "reference-prompts-review");
   });
   state.referencePrompts = referencePrompts;
-  await checkpoint(outputFolder, state, referencePromptsApproved ? "generation-target-selection" : "reference-prompts-review");
+  await checkpoint(outputFolder, state, referencePromptsApproved ? "storyboard-prompt-generation" : "reference-prompts-review");
   if (!referencePromptsApproved) return { outputFolder, status: state.status };
+
+  console.log("กำลังสร้าง prompt สำหรับ storyboard key image...");
+  let storyboard = await trackFailure(outputFolder, state, () => generateJson(
+    llm,
+    storyboardPrompt(story, shots, referencePrompts, aspectRatio),
+    (value) => validateStoryboardPrompt(value, shots, referencePrompts, aspectRatio),
+    "storyboard key image prompt"
+  ));
+  const storyboardFile = path.join(outputFolder, "04-storyboard-keyimage-prompt.md");
+  await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
+  state.storyboardPrompt = storyboard;
+  await checkpoint(outputFolder, state, "storyboard-prompt-review");
+  const storyboardApproved = await reviewDocument(terminal, "storyboard key image prompt", storyboardFile, async (notes) => {
+    storyboard = await trackFailure(outputFolder, state, () => generateJson(
+      llm,
+      storyboardPrompt(story, shots, referencePrompts, aspectRatio, notes),
+      (value) => validateStoryboardPrompt(value, shots, referencePrompts, aspectRatio),
+      "storyboard key image prompt"
+    ));
+    await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
+    state.storyboardPrompt = storyboard;
+    await checkpoint(outputFolder, state, "storyboard-prompt-review");
+  });
+  state.storyboardPrompt = storyboard;
+  await checkpoint(outputFolder, state, storyboardApproved ? "generation-target-selection" : "storyboard-prompt-review");
+  if (!storyboardApproved) return { outputFolder, status: state.status };
 
   const generationTarget = await selectGenerationTarget(terminal, state.generationTarget);
   state.generationTarget = generationTarget;
@@ -503,7 +529,38 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
         await checkpoint(outputFolder, state, "reference-prompts-review");
       });
       state.referencePrompts = referencePrompts;
-      await checkpoint(outputFolder, state, approved ? "generation-target-selection" : "reference-prompts-review");
+      await checkpoint(outputFolder, state, approved ? "storyboard-prompt-generation" : "reference-prompts-review");
+      if (!approved) return { outputFolder, status: state.status };
+    }
+
+    if (!state.storyboardPrompt || ["storyboard-prompt-generation", "storyboard-prompt-review"].includes(state.status)) {
+      let storyboard = state.storyboardPrompt;
+      const storyboardFile = path.join(outputFolder, "04-storyboard-keyimage-prompt.md");
+      if (!storyboard) {
+        console.log("กำลังสร้าง prompt สำหรับ storyboard key image ต่อ...");
+        storyboard = await generateJson(
+          llm,
+          storyboardPrompt(state.story, state.shots, state.referencePrompts, input.aspectRatio),
+          (value) => validateStoryboardPrompt(value, state.shots, state.referencePrompts, input.aspectRatio),
+          "storyboard key image prompt"
+        );
+        state.storyboardPrompt = storyboard;
+        await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
+        await checkpoint(outputFolder, state, "storyboard-prompt-review");
+      }
+      const approved = await reviewDocument(terminal, "storyboard key image prompt", storyboardFile, async (notes) => {
+        storyboard = await generateJson(
+          llm,
+          storyboardPrompt(state.story, state.shots, state.referencePrompts, input.aspectRatio, notes),
+          (value) => validateStoryboardPrompt(value, state.shots, state.referencePrompts, input.aspectRatio),
+          "storyboard key image prompt"
+        );
+        state.storyboardPrompt = storyboard;
+        await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
+        await checkpoint(outputFolder, state, "storyboard-prompt-review");
+      });
+      state.storyboardPrompt = storyboard;
+      await checkpoint(outputFolder, state, approved ? "generation-target-selection" : "storyboard-prompt-review");
       if (!approved) return { outputFolder, status: state.status };
     }
 

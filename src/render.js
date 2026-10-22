@@ -22,6 +22,55 @@ export function renderReferencePrompts(value) {
   return `# Reference image prompts: ${value.projectTitle}\n\n## Global style lock\n\n- Visual direction: ${value.globalStyle?.visualDirection}\n- Mood: ${value.globalStyle?.mood || "ไม่ได้ระบุเพิ่มเติม"}\n- Style lock: ${value.globalStyle?.styleLock}\n\n## Existing references\n\n${existing}\n\n${assets}\n## วิธีใช้งาน\n\n${list(value.usageGuide)}\n`;
 }
 
+export function renderStoryboardPrompt(value) {
+  const panels = (value.panels || []).map((panel) => `### Shot ${panel.shotNumber} — ${panel.timeRange}
+
+- Keyframe: ${panel.keyframeMoment}
+- Subjects: ${(panel.subjects || []).join(", ") || "ไม่มี"}
+- References: ${(panel.referencePictures || []).join(", ") || "ไม่มี"}
+- Camera: ${panel.camera}
+- Composition: ${panel.composition}
+- Continuity: ${(panel.continuityNotes || []).join("; ") || "ไม่มีข้อมูล"}
+- Negative constraints: ${(panel.negativeConstraints || []).join("; ") || "ไม่มีข้อมูล"}
+
+\`\`\`text
+${panel.prompt}
+\`\`\``).join("\n\n");
+  return `# Storyboard key image prompt: ${value.projectTitle}
+
+- Shots: ${value.shotCount}
+- Grid: ${value.grid?.columns} columns × ${value.grid?.rows} rows
+- Reading order: ${value.grid?.readingOrder}
+- Panel aspect ratio: ${value.grid?.panelAspectRatio}
+- Visual direction: ${value.globalStyle?.visualDirection}
+- Mood: ${value.globalStyle?.mood}
+
+## Master prompt
+
+\`\`\`text
+${value.masterPrompt}
+\`\`\`
+
+## Negative prompt
+
+\`\`\`text
+${value.negativePrompt}
+\`\`\`
+
+## Panel map
+
+${panels}
+
+## Reference mapping
+
+${(value.referenceMapping || []).map((item) => `- <${item.pictureId}> — ${item.usage}`).join("\n") || "- ไม่มี"}
+
+## Usage guide
+
+${list(value.usageGuide)}
+`;
+}
+
 export function renderShots(value) {
   const shots = value.shots?.map((shot) => {
     const dialogue = shot.dialogue?.length

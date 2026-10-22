@@ -116,6 +116,29 @@ class FakeLlm {
         usageGuide: ["Generate each image and attach it with its assigned Picture ID."]
       });
     }
+    if (prompt.includes("storyboard key image แบบ contact sheet")) {
+      const panelPrompt = "A cinematic still frame with a 50mm eye-level medium composition, warm restaurant practical lighting, clear foreground, midground, and background separation, stable screen direction, precise character identity and wardrobe, readable hand placement, controlled facial performance, physically consistent props, natural skin and fabric texture, and one decisive emotional instant from the approved shot.";
+      const masterPrompt = "Create one polished cinematic storyboard contact sheet containing exactly three equal-sized panels in a two-column by two-row grid, ordered left-to-right and top-to-bottom, with the unused fourth cell left as a plain neutral field. Preserve the same character identity, coat, restaurant geography, table position, warm practical lighting, palette, lens language, screen direction, and realistic live-action look across all panels. Panel one shows the woman looking away across the restaurant table; panel two isolates the precise instant she withdraws her hand; panel three shows her leaving toward the established exit. Each panel is a single still moment with clean gutters, consistent 9:16 panel framing, readable silhouettes, cinematic depth, natural anatomy, and no repeated action phases. Do not place text, labels, captions, dialogue, logos, watermarks, interface elements, ghost poses, split time, or extra people inside the artwork.";
+      return JSON.stringify({
+        projectTitle: "Night Goodbye",
+        shotCount: 3,
+        grid: { columns: 2, rows: 2, readingOrder: "left-to-right, top-to-bottom", panelAspectRatio: "9:16" },
+        globalStyle: { visualDirection: "Live-action cinematic", mood: "melancholic", continuityLock: "same identity, coat, table, restaurant geography and warm light" },
+        referenceMapping: [
+          { pictureId: "Picture 1", usage: "character identity and wardrobe" },
+          { pictureId: "Picture 2", usage: "restaurant geography and lighting" },
+          { pictureId: "Picture 3", usage: "table material and position" }
+        ],
+        panels: [
+          { shotNumber: 1, timeRange: "00:00.000-00:05.000", keyframeMoment: "Subject 1 looks away", subjects: ["Subject 1"], referencePictures: ["Picture 1", "Picture 2", "Picture 3"], camera: "50mm medium eye-level", composition: "two-shot table geography", prompt: panelPrompt, continuityNotes: ["same coat"], negativeConstraints: ["no extra characters"] },
+          { shotNumber: 2, timeRange: "00:05.000-00:10.000", keyframeMoment: "Subject 1 withdraws her hand", subjects: ["Subject 1"], referencePictures: ["Picture 1", "Picture 2", "Picture 3"], camera: "50mm medium eye-level", composition: "hand and face remain readable", prompt: panelPrompt, continuityNotes: ["same table"], negativeConstraints: ["no duplicate hands"] },
+          { shotNumber: 3, timeRange: "00:10.000-00:15.000", keyframeMoment: "Subject 1 leaves", subjects: ["Subject 1"], referencePictures: ["Picture 1", "Picture 2"], camera: "50mm medium eye-level", composition: "exit held frame right", prompt: panelPrompt, continuityNotes: ["same screen direction"], negativeConstraints: ["no extra characters"] }
+        ],
+        masterPrompt,
+        negativePrompt: "text, labels, subtitles, speech bubbles, watermark, logo, UI, extra panels, duplicated people, ghost poses, multiple time phases, inconsistent wardrobe, broken anatomy, changed geography",
+        usageGuide: ["Attach Pictures 1-3 and generate one composite image.", "Read panels left-to-right, top-to-bottom; the fourth cell remains blank."]
+      });
+    }
     const detail = " The 50mm medium camera holds at eye level across the same table while warm practical light shapes her face. Her controlled breathing, gaze, and precise hand movement show the emotional change; cloth movement and restaurant room tone remain synchronized. The camera completes its slow motivated push, preserves screen direction and wardrobe continuity, and ends on a clearly defined final position before a hard cut.";
     return `DY,subject_definitions:\n<Subject 1> is a woman in a Live-action cinematic style with a melancholic tone, matching <Picture 1>. The restaurant matches <Picture 2> and table matches <Picture 3>.\nsummary:\nVisual direction: Live-action cinematic; Mood: melancholic\nretention_analysis:\nUse <Picture 1>, <Picture 2>, and <Picture 3>.\ndetailed_description:\n[Shot 1] <Subject 1> looks away.${detail}\n[Shot 2] At 00:05.000 <Subject 1> withdraws her hand.${detail}\n[Shot 3] At 00:10.000 <Subject 1> leaves.${detail}\noverall_soundscape:\nQuiet restaurant ambience.\nnon_diegetic_music:\nNone.`;
   }
@@ -123,7 +146,7 @@ class FakeLlm {
 
 class FailFinalLlm extends FakeLlm {
   async generate(options) {
-    if (options.prompt.includes("REFERENCE_ASSETS:")) throw new Error("temporary final prompt failure");
+    if (options.prompt.includes("สร้าง prompt ภาษาอังกฤษตามโครงสร้างตัวอย่าง")) throw new Error("temporary final prompt failure");
     return super.generate(options);
   }
 }
@@ -131,6 +154,13 @@ class FailFinalLlm extends FakeLlm {
 class FailReferenceLlm extends FakeLlm {
   async generate(options) {
     if (options.prompt.includes("สร้าง prompt ภาษาอังกฤษสำหรับ generate ภาพอ้างอิง")) throw new Error("temporary reference prompt failure");
+    return super.generate(options);
+  }
+}
+
+class FailStoryboardLlm extends FakeLlm {
+  async generate(options) {
+    if (options.prompt.includes("storyboard key image แบบ contact sheet")) throw new Error("temporary storyboard prompt failure");
     return super.generate(options);
   }
 }
@@ -215,7 +245,7 @@ test("workflow creates every reviewed artifact", async () => {
     settings: { provider: "gemini", model: "test", promptPrefix: "DY," }
   });
   assert.equal(result.status, "complete");
-  for (const file of ["00-brief.md", "01-analysis.md", "02-story.md", "03-shots.md", "04-reference-image-prompts.md", "05-generation-prompt.txt", ".shot-analysis/session.json"]) {
+  for (const file of ["00-brief.md", "01-analysis.md", "02-story.md", "03-shots.md", "04-reference-image-prompts.md", "04-storyboard-keyimage-prompt.md", "05-generation-prompt.txt", ".shot-analysis/session.json"]) {
     assert.ok((await readFile(path.join(root, file), "utf8")).length > 0, `${file} should exist`);
   }
   const analysis = await readFile(path.join(root, "01-analysis.md"), "utf8");
@@ -225,6 +255,7 @@ test("workflow creates every reviewed artifact", async () => {
   assert.equal(session.selectedVisualDirection.id, "live-action-cinematic");
   assert.equal(session.selectedShotCount, 3);
   assert.equal(session.referencePrompts.assets.length, 3);
+  assert.equal(session.storyboardPrompt.panels.length, 3);
   const finalPrompt = await readFile(path.join(root, "05-generation-prompt.txt"), "utf8");
   assert.match(finalPrompt, /Visual direction: ภาพยนตร์สมจริง \(Live-action cinematic\)/);
 });
@@ -351,12 +382,43 @@ test("resume continues from reference prompts without regenerating approved stag
   const llm = new CountingLlm();
   const result = await runResumeWorkflow({ terminal, llm, folder: root, settings });
   assert.equal(result.status, "complete");
-  assert.equal(llm.calls.length, 2);
+  assert.equal(llm.calls.length, 3);
   assert.match(llm.calls[0], /สร้าง prompt ภาษาอังกฤษสำหรับ generate ภาพอ้างอิง/);
-  assert.match(llm.calls[1], /REFERENCE_ASSETS:/);
+  assert.match(llm.calls[1], /storyboard key image แบบ contact sheet/);
+  assert.match(llm.calls[2], /REFERENCE_ASSETS:/);
   assert.equal(llm.calls.some((prompt) => prompt.includes("วิเคราะห์ brief")), false);
   assert.equal(llm.calls.some((prompt) => prompt.includes("สร้างโครงเรื่อง")), false);
   assert.equal(llm.calls.some((prompt) => prompt.includes("แตกโครงเรื่องเป็น shot list")), false);
+});
+
+test("resume retries the storyboard stage without regenerating approved reference prompts", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-storyboard-resume-test-"));
+  const asks = ["Storyboard Resume", "15", "", "Reels", "9:16", ""];
+  const terminal = {
+    ask: async () => asks.shift() ?? "",
+    multiline: async () => "A quiet breakup in a restaurant.",
+    multiSelect: async () => ["pure-love"],
+    choose: async (question) => question.includes("brief") ? "text" : "a"
+  };
+  const settings = { provider: "gemini", model: "test", promptPrefix: "DY," };
+  await assert.rejects(
+    runNewWorkflow({ terminal, llm: new FailStoryboardLlm(), args: { output: root }, settings }),
+    /temporary storyboard prompt failure/
+  );
+  let session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
+  assert.equal(session.status, "storyboard-prompt-generation");
+  assert.ok(session.referencePrompts);
+  assert.equal(session.storyboardPrompt, undefined);
+
+  const llm = new CountingLlm();
+  const result = await runResumeWorkflow({ terminal, llm, folder: root, settings });
+  assert.equal(result.status, "complete");
+  assert.equal(llm.calls.length, 2);
+  assert.match(llm.calls[0], /storyboard key image แบบ contact sheet/);
+  assert.match(llm.calls[1], /REFERENCE_ASSETS:/);
+  assert.equal(llm.calls.some((prompt) => prompt.includes("generate ภาพอ้างอิง")), false);
+  session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
+  assert.equal(session.storyboardPrompt.panels.length, 3);
 });
 
 test("resume discovers a single project session below the requested folder", async () => {

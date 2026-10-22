@@ -151,6 +151,38 @@ export function referencePromptsPrompt(story, shots, existingReferences = [], re
 }\nข้อกำหนด:\n- รักษา visualDirection, mood, ยุคสมัย, palette และระดับความสมจริงจาก STORY อย่างเคร่งครัด\n- existingReferences ต้องคง Picture ID ตามที่ได้รับ ห้ามสร้าง prompt ซ้ำให้ภาพที่มีอยู่แล้ว\n- assets ใหม่ต้องเริ่มหมายเลข Picture ต่อจาก existingReferences และห้ามซ้ำกัน\n- character: สร้าง character sheet บนพื้นหลังเรียบ มี full-body front, three-quarter, side, back, facial expressions, เสื้อผ้า และอุปกรณ์ประจำตัว โดยห้ามใส่ตัวละครอื่น\n- location: สร้าง environment reference ที่ไม่มีตัวละคร มี wide establishing view และรายละเอียดสถาปัตยกรรม แสง วัสดุ สี และจุดที่ใช้จัดฉาก\n- object: สร้างเฉพาะวัตถุสำคัญต่อการกระทำหรือ continuity แยกวัตถุบนพื้นหลังเรียบ พร้อมหลายมุมและรายละเอียดวัสดุ ห้ามสร้างวัตถุทั่วไปที่ไม่ต้องรักษารูปลักษณ์\n- prompt ทุกข้อเป็นภาษาอังกฤษ ใช้คำบรรยายเชิงภาพที่ generate ได้จริง และห้ามใส่ชื่อศิลปินที่ยังมีชีวิต\n- linkedSubjects และ usedInShots ต้องตรงกับ STORY/SHOTS\n- หากไม่มีวัตถุสำคัญ ไม่ต้องสร้าง assetType object`;
 }
 
+function storyboardGrid(shotCount) {
+  const columns = shotCount <= 2 ? Math.max(shotCount, 1) : shotCount <= 4 ? 2 : shotCount <= 6 ? 3 : shotCount <= 8 ? 4 : Math.ceil(Math.sqrt(shotCount));
+  return { columns, rows: Math.ceil(shotCount / columns) };
+}
+
+export function storyboardPrompt(story, shots, referenceAssets, aspectRatio = "9:16", revision = "") {
+  const shotCount = shots?.shots?.length || 0;
+  const grid = storyboardGrid(shotCount);
+  return `${STORY_FRAMEWORK}\n${SHOT_LIST_FRAMEWORK}\n${jsonInstruction}\n\nสร้าง prompt ภาษาอังกฤษสำหรับ generate storyboard key image แบบ contact sheet หนึ่งภาพ ซึ่งมีหนึ่ง panel ต่อหนึ่ง shot เพื่อให้ผู้ใช้เห็นภาพรวมทั้ง sequence ก่อนสร้างวิดีโอ\nSTORY:\n${JSON.stringify(story, null, 2)}\nSHOTS:\n${JSON.stringify(shots, null, 2)}\nREFERENCE_ASSETS:\n${JSON.stringify(referenceAssets, null, 2)}\nGRID_SPEC:\n${JSON.stringify({ ...grid, panelAspectRatio: aspectRatio, shotCount }, null, 2)}\nREVISION REQUEST:\n${revision || "ไม่มี"}\n\nใช้ schema นี้:\n{
+  "projectTitle":"string",
+  "shotCount":${shotCount},
+  "grid":{"columns":${grid.columns},"rows":${grid.rows},"readingOrder":"left-to-right, top-to-bottom","panelAspectRatio":"${aspectRatio}"},
+  "globalStyle":{"visualDirection":"string","mood":"string","continuityLock":"identity, wardrobe, props, geography, lighting and palette shared across panels"},
+  "referenceMapping":[{"pictureId":"Picture 1","usage":"identity, location, prop or look locked by this image"}],
+  "panels":[{
+    "shotNumber":1,
+    "timeRange":"00:00.000-00:03.000",
+    "keyframeMoment":"เหตุการณ์หนึ่งขณะที่มองเห็นได้ในเฟรมเดียวและเป็นภาพตัวแทนของ shot",
+    "subjects":["Subject 1"],
+    "referencePictures":["Picture 1"],
+    "camera":"lens, shot size, angle and position",
+    "composition":"foreground, midground, background, screen direction and attention focus",
+    "prompt":"English still-image prompt for this single panel",
+    "continuityNotes":["string"],
+    "negativeConstraints":["string"]
+  }],
+  "masterPrompt":"Complete English prompt for generating the entire storyboard as one composite image",
+  "negativePrompt":"English negative prompt for the complete contact sheet",
+  "usageGuide":["string"]
+}\nข้อกำหนด:\n- ต้องมี panels เท่ากับจำนวน SHOTS และเรียง shotNumber จาก 1 โดยไม่ข้าม\n- แต่ละ panel เป็น still keyframe เพียงหนึ่งขณะ ห้ามรวมต้น กลาง และจบของ action ไว้ในช่องเดียว ห้ามใช้ภาพซ้อน ghost pose หรือหลายเวลาใน panel เดียว\n- เลือก keyframeMoment จาก attentionFocus, visualPayoff และ action/result ที่สำคัญที่สุด โดยต้องเกิดขึ้นจริงใน shot นั้นและไม่เพิ่มเหตุการณ์ใหม่\n- timeRange ต้องตรงกับ startTime/endTime ของ SHOTS ทุกข้อ\n- subjects ต้องเป็นผู้ที่มองเห็นจริงใน keyframe; ตัวละครนอกเฟรมไม่ต้องวาด แต่สามารถส่งผลผ่านแสง เงา เสียง หรือวัตถุได้เมื่อ shot รองรับ\n- referenceMapping ต้องมี Picture ID ทุกภาพจาก REFERENCE_ASSETS อย่างละหนึ่งครั้ง ใช้ Picture ID เฉพาะจากรายการนั้น และ referencePictures ต้องตรงกับตัวละคร สถานที่ หรือวัตถุใน panel ห้ามสร้าง Picture ID ใหม่\n- prompt ของแต่ละ panel ต้องระบุกล้อง composition geography แสง performance prop state และภาพสุดท้ายที่อ่านได้ แต่เขียนเป็นภาพนิ่ง ไม่บรรยาย motion หลายขั้น\n- masterPrompt ต้องสั่งสร้าง contact sheet หนึ่งภาพตาม GRID_SPEC มี ${shotCount} panels ขนาดเท่ากัน คั่นด้วยเส้น gutter สะอาด เรียงซ้ายไปขวาและบนลงล่าง แต่ละ panel รักษาอัตราส่วน ${aspectRatio}\n- หาก grid มีช่องเกินจำนวน shot ให้ช่องที่เหลือเป็นพื้นกลางเรียบ ไม่มีตัวละคร ฉาก หรือข้อความ\n- ห้ามสร้าง title, subtitle, dialogue text, watermark, logo, UI, speech bubble หรือข้อความภายใน artwork; การจับคู่ panel กับ shot ให้อาศัยลำดับช่องใน usageGuide\n- รักษา identity, wardrobe, prop ownership/state, geography, screen direction, lighting direction, palette และระดับความสมจริงข้ามทุก panel\n- masterPrompt, panel prompt, negativePrompt และ usageGuide ต้องพร้อมนำไปใช้จริงและเป็นภาษาอังกฤษ`;
+}
+
 function seedanceFinalPrompt(story, shots, visualDirection, referenceAssets) {
   return `สร้าง production prompt ภาษาอังกฤษก้อนเดียวสำหรับ Seedance 2.5 จากข้อมูลที่อนุมัติแล้วเท่านั้น\n\nSTORY:\n${JSON.stringify(story, null, 2)}\nSHOTS:\n${JSON.stringify(shots, null, 2)}\nVISUAL_DIRECTION:\n${JSON.stringify(visualDirection, null, 2)}\nREFERENCE_ASSETS:\n${JSON.stringify(referenceAssets, null, 2)}\n\nข้อกำหนด:\n- บรรทัดแรกต้องเป็น REFERENCE_MAPPING:\n- ใช้หัวข้อตามลำดับและมีครั้งเดียว: REFERENCE_MAPPING:, SEQUENCE_SPECIFICATION:, TIMECODED_BEATS:, GLOBAL_CONSTRAINTS:\n- ใน REFERENCE_MAPPING ให้ map <Picture N> ทุกภาพเป็น @ImageN โดยรักษาหมายเลขเดิม ระบุหน้าที่และสิ่งที่ภาพล็อก ห้ามสร้าง Image ID เพิ่ม\n- SEQUENCE_SPECIFICATION ระบุ Generator target: Seedance 2.5, duration, aspect ratio, Visual direction, Mood, look, location geography, language และแนวทางเสียงจากข้อมูลต้นฉบับ\n- TIMECODED_BEATS แบ่งเป็น [Beat N] 00:00.000-00:03.000 ตาม startTime/endTime จริงของทุก shot ห้ามเปลี่ยนจำนวน ลำดับ หรือระยะเวลา\n- แต่ละ Beat ต้องเป็นย่อหน้า production prompt ภาษาอังกฤษที่ระบุตำแหน่งกล้อง ขนาดภาพ มุม เลนส์ องค์ประกอบ ตำแหน่ง Subject เฟรมแรก actionBeats ตามช่วงเวลา camera response แสง performance เสียง transition และเฟรมสุดท้าย\n- ใช้ <Subject N> สำหรับทุก Subject และ @ImageN สำหรับภาพอ้างอิงที่เกี่ยวข้อง แยกผู้ที่เห็นในเฟรมกับผู้กระทำจากนอกเฟรมให้ชัด\n- รักษา startState, endState, continuityBridge, causalLink, continuityIn/continuityOut และ state ของ prop โดยไม่เริ่ม motion ซ้ำหรือทำให้ของปรากฏเอง\n- Dialogue ต้องตรงข้อมูลต้นฉบับทุกคำและใช้รูปแบบ <d>[Language] dialogue</d> ช็อตที่ไม่มีบทพูดให้ระบุ No dialogue.\n- GLOBAL_CONSTRAINTS สรุป identity, anatomy, character count, wardrobe, prop ownership/state, geography, screen direction, lighting, physics, audio, dialogue/lip-sync, visible text และข้อห้ามจากทุก shot\n- ห้ามเพิ่มเหตุการณ์ ตัวละคร prop Picture ID บทพูด subtitle logo watermark UI หรือ camera gimmick ที่ไม่มีในข้อมูลต้นฉบับ\n- ห้ามมี citation, Markdown heading, code fence, คำอธิบายภาษาไทย หรือรายงานการตรวจ\n- ส่งเฉพาะ prompt ฉบับสมบูรณ์`;
 }

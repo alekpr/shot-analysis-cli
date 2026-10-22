@@ -198,10 +198,13 @@ CLI จะทำงานตามลำดับดังนี้:
 6. สร้างโครงเรื่องให้ตรวจและอนุมัติ
 7. สร้าง shot list ตามจำนวนที่ยืนยัน พร้อมออกแบบ cinematic hook, attention path และ visual payoff แล้วตรวจเวลา continuity, ผู้ที่อยู่ใน/นอกเฟรม, เหตุและผล, ช่วงเวลาของ action และการเปลี่ยน state ของ prop
 8. สร้าง prompt สำหรับ Character sheets, Locations และ Objects พร้อม Picture ID โดยแยก Object reference หนึ่งชนิดต่อหนึ่งภาพ
-9. เลือกโมเดลปลายทางระหว่าง `MiniMax H3` และ `Seedance 2.5`
-10. สร้าง generation prompt ฉบับสุดท้ายจากข้อมูลที่อนุมัติแล้วในรูปแบบเฉพาะของโมเดลที่เลือก
+9. สร้าง prompt สำหรับ Storyboard Key Image แบบ contact sheet หนึ่งภาพ มีหนึ่ง panel ต่อหนึ่ง shot แล้วให้ผู้ใช้ตรวจและอนุมัติภาพรวมของ sequence
+10. เลือกโมเดลปลายทางระหว่าง `MiniMax H3` และ `Seedance 2.5`
+11. สร้าง generation prompt ฉบับสุดท้ายจากข้อมูลที่อนุมัติแล้วในรูปแบบเฉพาะของโมเดลที่เลือก
 
 `MiniMax H3` ใช้โครงสร้าง `DY,subject_definitions`, `<Subject N>`, `<Picture N>` และรายละเอียดราย Shot ส่วน `Seedance 2.5` ใช้ `REFERENCE_MAPPING`, `@ImageN`, `SEQUENCE_SPECIFICATION`, timecoded Beat และ `GLOBAL_CONSTRAINTS` ค่าที่เลือกจะถูกบันทึกใน session และนำกลับมาใช้เมื่อ resume
+
+Storyboard prompt จะกำหนด grid จากจำนวน shot โดยอัตโนมัติ รักษาอัตราส่วนภาพของแต่ละ panel และเลือกหนึ่ง keyframe ที่เป็นตัวแทนของแต่ละ shot เท่านั้น ไฟล์มี Master Prompt สำหรับสร้างภาพรวมหนึ่งภาพ, Negative Prompt, Panel Map และ Picture mapping สำหรับแนบ reference images ก่อน generate
 
 ในหน้าเลือก Core ใช้ปุ่มลูกศรขึ้น/ลงเพื่อเลื่อน, `Space` เพื่อเลือกหรือยกเลิก และ `Enter` เพื่อยืนยัน รายการที่ LLM แนะนำจะแสดงด้านบนพร้อมเครื่องหมาย `★ แนะนำ` และสามารถเลือก `กำหนด Core เอง` ได้
 
@@ -224,6 +227,7 @@ CLI จะทำงานตามลำดับดังนี้:
 | `02-story.md` | โครงเรื่องที่ผ่านขั้น review |
 | `03-shots.md` | Production shot list พร้อม cinematic intent, attention path, visual payoff, beat, geography, visible state, timed action, causal link, กล้อง, เสียง และ continuity bridge |
 | `04-reference-image-prompts.md` | Prompt สำหรับ Character, Location และ Object references โดยแยกวัตถุแต่ละชนิดเป็นคนละ Picture |
+| `04-storyboard-keyimage-prompt.md` | Master Prompt สำหรับสร้าง Storyboard contact sheet หนึ่งภาพ พร้อมหนึ่ง keyframe ต่อ shot, grid, panel map, reference mapping และ negative prompt |
 | `05-generation-prompt.txt` | Generation prompt ฉบับรวมในรูปแบบ MiniMax H3 หรือ Seedance 2.5 ตามที่ผู้ใช้เลือก พร้อมรายละเอียดกล้อง geography ลำดับ action สีหน้า แสง เสียง บทพูด transition และ continuity |
 | `.shot-analysis/session.json` | สถานะและข้อมูล checkpoint สำหรับ `status` และ `resume` |
 
@@ -247,7 +251,7 @@ shot-analysis status ./projects/restaurant-clip
 shot-analysis resume ./projects/restaurant-clip
 ```
 
-ระบบจะอ่าน `.shot-analysis/session.json` และทำต่อจากขั้น analysis, story, shot list, reference image prompts, การเลือกโมเดลปลายทาง หรือ final prompt โดยไม่สร้างขั้นที่ผ่านการอนุมัติแล้วซ้ำ หากเลือก MiniMax H3 หรือ Seedance 2.5 ไปแล้ว ระบบจะใช้ตัวเลือกเดิมเมื่อ resume
+ระบบจะอ่าน `.shot-analysis/session.json` และทำต่อจากขั้น analysis, story, shot list, reference image prompts, storyboard prompt, การเลือกโมเดลปลายทาง หรือ final prompt โดยไม่สร้างขั้นที่ผ่านการอนุมัติแล้วซ้ำ หากเลือก MiniMax H3 หรือ Seedance 2.5 ไปแล้ว ระบบจะใช้ตัวเลือกเดิมเมื่อ resume
 
 สามารถเปลี่ยน provider หรือ model ใน `.env` หรือด้วย `shot-analysis config` ก่อน resume ได้ หากระบุโฟลเดอร์แม่และพบ session เพียงโปรเจกต์เดียวในโฟลเดอร์ย่อย ระบบจะค้นหาให้โดยอัตโนมัติ หากพบหลาย session ระบบจะแสดง path ที่พบเพื่อให้ระบุโปรเจกต์โดยตรง
 
