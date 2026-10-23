@@ -44,3 +44,4 @@
 - 2026-10-23 — Task 4–7 เสร็จ: provider doctor, DeepSeek V4 default, canonical asset manifest, deterministic renderer และ shot batching; `npm test` ผ่าน 70 tests และเริ่ม Task 8–9
 - 2026-10-23 — Task 8–11 เสร็จ: stage regeneration, dependency invalidation, history/rollback, provider contract tests และ JSON status; `npm test` ผ่าน 75 tests
 - 2026-10-23 — Task 12 เสร็จ: CI สำหรับ Node 20/22, syntax check ครบทุก JS, MIT LICENSE และ package allowlist; `npm run check`, `npm test`, `npm audit` และ `npm pack --dry-run` ผ่าน
+- 2026-10-23 — Live verification ผ่าน: `shot-analysis doctor` เชื่อมต่อ Gemini `gemini-3.5-flash` และตรวจ JSON output สำเร็จใน 1749ms
