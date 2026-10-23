@@ -18,13 +18,13 @@ export function normalizeGenerationTarget(value) {
   return null;
 }
 
-export async function selectGenerationTarget(terminal, currentTarget) {
+export async function selectGenerationTarget(terminal, currentTarget, { force = false } = {}) {
   const existing = normalizeGenerationTarget(currentTarget);
-  if (existing) return existing;
+  if (existing && !force) return existing;
   const selected = await terminal.choose("เลือกโมเดลปลายทางสำหรับ generation prompt", [
     { key: "m", label: "MiniMax H3", description: GENERATION_TARGETS["minimax-h3"].description },
     { key: "s", label: "Seedance 2.5", description: GENERATION_TARGETS["seedance-2.5"].description }
-  ], "m");
+  ], existing === "seedance-2.5" ? "s" : "m");
   return normalizeGenerationTarget(selected) || "minimax-h3";
 }
 

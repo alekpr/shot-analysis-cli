@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { generateJson, runNewWorkflow, runResumeWorkflow } from "../src/workflow.js";
+import { generateJson, runNewWorkflow, runRegeneratePromptWorkflow, runResumeWorkflow } from "../src/workflow.js";
 
 function fakeShot({ number, startTime, endTime, objective, action, composition, emotion }) {
   return {
@@ -204,6 +204,18 @@ class SeedanceLlm extends FakeLlm {
   }
 }
 
+class CountingSeedanceLlm extends SeedanceLlm {
+  constructor() {
+    super();
+    this.calls = [];
+  }
+
+  async generate(options) {
+    this.calls.push(options.prompt);
+    return super.generate(options);
+  }
+}
+
 test("generateJson regenerates from the original prompt after repeated malformed JSON", async () => {
   const responses = [
     '{"title":"broken"',
@@ -264,7 +276,7 @@ test("workflow creates every reviewed artifact", async () => {
     settings: { provider: "gemini", model: "test", promptPrefix: "DY," }
   });
   assert.equal(result.status, "complete");
-  for (const file of ["00-brief.md", "01-analysis.md", "02-story.md", "03-shots.md", "04-reference-image-prompts.md", "04-storyboard-keyimage-prompt.md", "05-generation-prompt.txt", ".shot-analysis/session.json"]) {
+  for (const file of ["00-brief.md", "01-analysis.md", "02-story.md", "03-shots.md", "04-reference-image-prompts.md", "04-storyboard-keyimage-prompt.md", "minimax-h3-05-generation-prompt.txt", ".shot-analysis/session.json"]) {
     assert.ok((await readFile(path.join(root, file), "utf8")).length > 0, `${file} should exist`);
   }
   const analysis = await readFile(path.join(root, "01-analysis.md"), "utf8");
@@ -275,7 +287,7 @@ test("workflow creates every reviewed artifact", async () => {
   assert.equal(session.selectedShotCount, 3);
   assert.equal(session.referencePrompts.assets.length, 3);
   assert.equal(session.storyboardPrompt.panels.length, 3);
-  const finalPrompt = await readFile(path.join(root, "05-generation-prompt.txt"), "utf8");
+  const finalPrompt = await readFile(path.join(root, "minimax-h3-05-generation-prompt.txt"), "utf8");
   assert.match(finalPrompt, /Visual direction: ภาพยนตร์สมจริง \(Live-action cinematic\)/);
 });
 
@@ -333,10 +345,39 @@ test("workflow lets the user select Seedance 2.5 and stores the target for resum
   assert.equal(result.status, "complete");
   const session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
   assert.equal(session.generationTarget, "seedance-2.5");
-  const prompt = await readFile(path.join(root, "05-generation-prompt.txt"), "utf8");
+  const prompt = await readFile(path.join(root, "seedance-2.5-05-generation-prompt.txt"), "utf8");
   assert.ok(prompt.startsWith("REFERENCE_MAPPING:"));
   assert.match(prompt, /Generator target: Seedance 2\.5/);
   assert.doesNotMatch(prompt, /DY,subject_definitions:/);
+});
+
+test("regenerate rebuilds only the final prompt and keeps outputs for both targets", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-regenerate-test-"));
+  const asks = ["Regenerate Test", "15", "", "Reels", "9:16", ""];
+  const initialTerminal = {
+    ask: async () => asks.shift() ?? "",
+    multiline: async () => "A quiet breakup in a restaurant.",
+    multiSelect: async () => ["pure-love"],
+    choose: async (question) => question.includes("brief") ? "text" : "a"
+  };
+  const settings = { provider: "gemini", model: "test", promptPrefix: "DY," };
+  await runNewWorkflow({ terminal: initialTerminal, llm: new FakeLlm(), args: { output: root }, settings });
+
+  const regenerateTerminal = {
+    choose: async (question) => question.includes("โมเดลปลายทาง") ? "s" : "a"
+  };
+  const llm = new CountingSeedanceLlm();
+  const result = await runRegeneratePromptWorkflow({ terminal: regenerateTerminal, llm, folder: root, settings });
+
+  assert.equal(result.status, "complete");
+  assert.equal(llm.calls.length, 1);
+  assert.match(llm.calls[0], /production prompt ภาษาอังกฤษก้อนเดียวสำหรับ Seedance 2\.5/);
+  assert.ok((await readFile(path.join(root, "minimax-h3-05-generation-prompt.txt"), "utf8")).length > 0);
+  assert.ok((await readFile(path.join(root, "seedance-2.5-05-generation-prompt.txt"), "utf8")).startsWith("REFERENCE_MAPPING:"));
+  const session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
+  assert.equal(session.generationTarget, "seedance-2.5");
+  assert.equal(session.finalPromptFiles["minimax-h3"], path.join(root, "minimax-h3-05-generation-prompt.txt"));
+  assert.equal(session.finalPromptFiles["seedance-2.5"], path.join(root, "seedance-2.5-05-generation-prompt.txt"));
 });
 
 test("storyboard review can revise image references and propagate the latest version", async () => {
@@ -413,7 +454,7 @@ test("resume retries only the failed final prompt stage", async () => {
   assert.equal(result.status, "complete");
   assert.equal(llm.calls.length, 1);
   assert.match(llm.calls[0], /REFERENCE_ASSETS:/);
-  assert.ok((await readFile(path.join(root, "05-generation-prompt.txt"), "utf8")).length > 0);
+  assert.ok((await readFile(path.join(root, "minimax-h3-05-generation-prompt.txt"), "utf8")).length > 0);
   session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
   assert.equal(session.lastError, undefined);
   assert.equal(session.resumeCount, 2);

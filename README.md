@@ -235,10 +235,11 @@ Storyboard prompt จะกำหนด grid จากจำนวน shot โ�
 | `03-shots.md` | Production shot list พร้อม cinematic intent, attention path, visual payoff, beat, geography, visible state, timed action, causal link, กล้อง, เสียง และ continuity bridge |
 | `04-reference-image-prompts.md` | Prompt สำหรับ Character, Location และ Object references โดยแยกวัตถุแต่ละชนิดเป็นคนละ Picture |
 | `04-storyboard-keyimage-prompt.md` | Master Prompt สำหรับสร้าง Storyboard contact sheet หนึ่งภาพ พร้อมหนึ่ง keyframe ต่อ shot, grid, panel map, reference mapping และ negative prompt |
-| `05-generation-prompt.txt` | Generation prompt ฉบับรวมในรูปแบบ MiniMax H3 หรือ Seedance 2.5 ตามที่ผู้ใช้เลือก พร้อมรายละเอียดกล้อง geography ลำดับ action สีหน้า แสง เสียง บทพูด transition และ continuity |
+| `minimax-h3-05-generation-prompt.txt` | Generation prompt ฉบับรวมสำหรับ MiniMax H3 พร้อมรายละเอียดกล้อง geography ลำดับ action สีหน้า แสง เสียง บทพูด transition และ continuity |
+| `seedance-2.5-05-generation-prompt.txt` | Generation prompt ฉบับรวมสำหรับ Seedance 2.5 ในรูปแบบ Reference Mapping, timecoded beats และ global constraints |
 | `.shot-analysis/session.json` | สถานะและข้อมูล checkpoint สำหรับ `status` และ `resume` |
 
-หาก generation prompt ไม่ผ่าน validation ระบบอาจเก็บคำตอบล่าสุดไว้ที่ `05-generation-prompt.failed.txt` เพื่อช่วยตรวจสอบปัญหา
+ระบบสร้างเฉพาะไฟล์ของโมเดลที่เลือกในรอบนั้น และเก็บไฟล์ของโมเดลอื่นไว้ จึงสามารถมีทั้งสองไฟล์ในโปรเจกต์เดียวกันได้ หาก generation prompt ไม่ผ่าน validation ระบบอาจเก็บคำตอบล่าสุดไว้ที่ `<target>-05-generation-prompt.failed.txt` เช่น `minimax-h3-05-generation-prompt.failed.txt` เพื่อช่วยตรวจสอบปัญหา
 
 ## ดูสถานะ
 
@@ -260,6 +261,16 @@ shot-analysis resume ./projects/restaurant-clip
 
 ระบบจะอ่าน `.shot-analysis/session.json` และทำต่อจากขั้น analysis, story, shot list, reference image prompts, storyboard prompt, การเลือกโมเดลปลายทาง หรือ final prompt โดยไม่สร้างขั้นที่ผ่านการอนุมัติแล้วซ้ำ หากเลือก MiniMax H3 หรือ Seedance 2.5 ไปแล้ว ระบบจะใช้ตัวเลือกเดิมเมื่อ resume
 
+## สร้าง final prompt ใหม่หลังจบ workflow
+
+เมื่อต้องการสร้างเฉพาะ generation prompt ขั้นสุดท้ายใหม่ ให้ใช้:
+
+```bash
+shot-analysis regenerate ./projects/restaurant-clip
+```
+
+ระบบจะถามให้เลือก `MiniMax H3` หรือ `Seedance 2.5` ใหม่ทุกครั้ง แล้วใช้ Story, Shot List และ Image References ฉบับล่าสุดที่อนุมัติไว้ใน session โดยไม่สร้างขั้นก่อนหน้าซ้ำ หากเลือก target เดิม ระบบจะเขียนทับไฟล์ของ target นั้น หากเลือกอีก target ระบบจะสร้างไฟล์เพิ่มและเก็บไฟล์เดิมไว้
+
 สามารถเปลี่ยน provider หรือ model ใน `.env` หรือด้วย `shot-analysis config` ก่อน resume ได้ หากระบุโฟลเดอร์แม่และพบ session เพียงโปรเจกต์เดียวในโฟลเดอร์ย่อย ระบบจะค้นหาให้โดยอัตโนมัติ หากพบหลาย session ระบบจะแสดง path ที่พบเพื่อให้ระบุโปรเจกต์โดยตรง
 
 Session อยู่ในโฟลเดอร์ผลลัพธ์ของแต่ละโปรเจกต์ หากย้ายงานไปอีกเครื่อง ต้องคัดลอกทั้งโฟลเดอร์โปรเจกต์ รวมถึงโฟลเดอร์ซ่อน `.shot-analysis`:
@@ -279,6 +290,7 @@ cp -R ./projects/restaurant-clip /path/on/another-machine/
 | `shot-analysis new --brief FILE --output DIR` | ระบุไฟล์ brief และโฟลเดอร์ผลลัพธ์ |
 | `shot-analysis status DIR` | ดูสถานะ session ของโปรเจกต์ |
 | `shot-analysis resume DIR` | ทำงานต่อจาก checkpoint |
+| `shot-analysis regenerate DIR` | สร้างเฉพาะ final generation prompt ใหม่และเลือก target อีกครั้ง |
 
 ## แก้ปัญหาเบื้องต้น
 
@@ -321,7 +333,7 @@ ls -l "$HOME/Desktop/My Clip Brief.md"
 
 ### Generation prompt ไม่ผ่านการตรวจ
 
-CLI ตรวจว่าแต่ละ shot มี timestamp ตรงกับ shot list, กล่าวถึงเฉพาะ Subject ที่ประกาศว่าอยู่ในหรือนอกเฟรม, เก็บบทพูดในรูปแบบ `<d>[Language] ...</d>` และมีรายละเอียดเพียงพอสำหรับ production prompt ระบบยังแก้หัวข้อ `subject_definitions` ที่ซ้ำติดกันให้อัตโนมัติ หากไม่ผ่าน ระบบจะส่ง STORY, SHOTS และ reference assets ต้นฉบับกลับไปให้ LLM สร้างใหม่อัตโนมัติหนึ่งครั้ง หากยังไม่ผ่าน ระบบจะบันทึก checkpoint และไฟล์ `05-generation-prompt.failed.txt` จากนั้นสามารถเปลี่ยน model หรือ provider แล้วเรียก `shot-analysis resume <project-folder>` ได้
+CLI ตรวจว่าแต่ละ shot มี timestamp ตรงกับ shot list, กล่าวถึงเฉพาะ Subject ที่ประกาศว่าอยู่ในหรือนอกเฟรม, เก็บบทพูดในรูปแบบ `<d>[Language] ...</d>` และมีรายละเอียดเพียงพอสำหรับ production prompt ระบบยังแก้หัวข้อ `subject_definitions` ที่ซ้ำติดกันให้อัตโนมัติ หากไม่ผ่าน ระบบจะส่ง STORY, SHOTS และ reference assets ต้นฉบับกลับไปให้ LLM สร้างใหม่อัตโนมัติหนึ่งครั้ง หากยังไม่ผ่าน ระบบจะบันทึก checkpoint และไฟล์ `<target>-05-generation-prompt.failed.txt` จากนั้นสามารถเปลี่ยน model หรือ provider แล้วเรียก `shot-analysis resume <project-folder>` ได้
 
 ## พัฒนาและตรวจสอบโค้ด
 

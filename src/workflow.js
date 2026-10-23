@@ -115,6 +115,75 @@ async function trackFailure(folder, state, operation) {
   }
 }
 
+function generationPromptFilename(generationTarget, failed = false) {
+  return `${generationTarget}-05-generation-prompt${failed ? ".failed" : ""}.txt`;
+}
+
+async function generateFinalPromptArtifact({ llm, outputFolder, state, settings, selectedVisualDirection, progressMessage }) {
+  const generationTarget = state.generationTarget;
+  const prefix = settings.promptPrefix ?? "DY,";
+  const finalPromptRequest = finalPrompt(
+    state.story,
+    state.shots,
+    prefix,
+    selectedVisualDirection,
+    state.referencePrompts,
+    generationTarget
+  );
+  const systemPrompt = generationSystemPrompt(generationTarget);
+  console.log(`โมเดลปลายทาง: ${generationTargetLabel(generationTarget)}`);
+  console.log(progressMessage);
+
+  let generated = normalizeGenerationPrompt(await trackFailure(outputFolder, state, () => llm.generate({
+    system: systemPrompt,
+    prompt: finalPromptRequest,
+    temperature: 0.2
+  })), generationTarget, prefix, selectedVisualDirection);
+  const expectedShotCount = state.shots.shots.length;
+  let errors = validateGenerationPrompt(
+    generated,
+    generationTarget,
+    prefix,
+    expectedShotCount,
+    selectedVisualDirection,
+    state.referencePrompts,
+    state.shots,
+    state.story
+  );
+  if (errors.length) {
+    generated = normalizeGenerationPrompt(await trackFailure(outputFolder, state, () => llm.generate({
+      system: systemPrompt,
+      prompt: `สร้าง prompt ใหม่ให้ครบจากข้อมูลต้นฉบับและแก้ข้อผิดพลาดต่อไปนี้: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วย ${requiredPromptOpening(generationTarget, prefix)} ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\nคำสั่งและข้อมูลต้นฉบับ:\n${finalPromptRequest}\n\nคำตอบก่อนหน้าที่ไม่ผ่าน:\n${generated}`,
+      temperature: 0.1
+    })), generationTarget, prefix, selectedVisualDirection);
+    errors = validateGenerationPrompt(
+      generated,
+      generationTarget,
+      prefix,
+      expectedShotCount,
+      selectedVisualDirection,
+      state.referencePrompts,
+      state.shots,
+      state.story
+    );
+  }
+  if (errors.length) {
+    const error = new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
+    await saveText(path.join(outputFolder, generationPromptFilename(generationTarget, true)), generated);
+    await saveFailure(outputFolder, state, error);
+    throw error;
+  }
+
+  const promptFile = path.join(outputFolder, generationPromptFilename(generationTarget));
+  await saveText(promptFile, generated.trim());
+  await rm(path.join(outputFolder, generationPromptFilename(generationTarget, true)), { force: true });
+  state.completedAt = new Date().toISOString();
+  state.finalPromptFile = promptFile;
+  state.finalPromptFiles = { ...(state.finalPromptFiles || {}), [generationTarget]: promptFile };
+  await checkpoint(outputFolder, state, "complete");
+  return promptFile;
+}
+
 function normalizeExistingReferences(analysis, references = "") {
   const raw = analysis?.references?.length
     ? analysis.references
@@ -415,34 +484,14 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
   const generationTarget = await selectGenerationTarget(terminal, state.generationTarget);
   state.generationTarget = generationTarget;
   await checkpoint(outputFolder, state, "generating-prompt");
-  console.log(`โมเดลปลายทาง: ${generationTargetLabel(generationTarget)}`);
-  console.log("กำลังสร้าง generation prompt ฉบับสุดท้าย...");
-  const prefix = settings.promptPrefix ?? "DY,";
-  const finalPromptRequest = finalPrompt(story, shots, prefix, selectedVisualDirection, referencePrompts, generationTarget);
-  const systemPrompt = generationSystemPrompt(generationTarget);
-  let generated = normalizeGenerationPrompt(await trackFailure(outputFolder, state, () => llm.generate({ system: systemPrompt, prompt: finalPromptRequest, temperature: 0.2 })), generationTarget, prefix, selectedVisualDirection);
-  const expectedShotCount = shots.shots.length;
-  let errors = validateGenerationPrompt(generated, generationTarget, prefix, expectedShotCount, selectedVisualDirection, referencePrompts, shots, story);
-  if (errors.length) {
-    generated = normalizeGenerationPrompt(await trackFailure(outputFolder, state, () => llm.generate({
-      system: systemPrompt,
-      prompt: `สร้าง prompt ใหม่ให้ครบจากข้อมูลต้นฉบับและแก้ข้อผิดพลาดต่อไปนี้: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วย ${requiredPromptOpening(generationTarget, prefix)} ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\nคำสั่งและข้อมูลต้นฉบับ:\n${finalPromptRequest}\n\nคำตอบก่อนหน้าที่ไม่ผ่าน:\n${generated}`,
-      temperature: 0.1
-    })), generationTarget, prefix, selectedVisualDirection);
-    errors = validateGenerationPrompt(generated, generationTarget, prefix, expectedShotCount, selectedVisualDirection, referencePrompts, shots, story);
-  }
-  if (errors.length) {
-    const error = new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
-    await saveText(path.join(outputFolder, "05-generation-prompt.failed.txt"), generated);
-    await saveFailure(outputFolder, state, error);
-    throw error;
-  }
-  const promptFile = path.join(outputFolder, "05-generation-prompt.txt");
-  await saveText(promptFile, generated.trim());
-  await rm(path.join(outputFolder, "05-generation-prompt.failed.txt"), { force: true });
-  state.completedAt = new Date().toISOString();
-  state.finalPromptFile = promptFile;
-  await checkpoint(outputFolder, state, "complete");
+  const promptFile = await generateFinalPromptArtifact({
+    llm,
+    outputFolder,
+    state,
+    settings,
+    selectedVisualDirection,
+    progressMessage: "กำลังสร้าง generation prompt ฉบับสุดท้าย..."
+  });
   return { outputFolder, status: state.status, promptFile };
 }
 
@@ -661,40 +710,62 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
       const generationTarget = await selectGenerationTarget(terminal, state.generationTarget);
       state.generationTarget = generationTarget;
       await checkpoint(outputFolder, state, "generating-prompt");
-      console.log(`โมเดลปลายทาง: ${generationTargetLabel(generationTarget)}`);
-      console.log("กำลังสร้าง generation prompt ต่อจาก checkpoint...");
-      const prefix = settings.promptPrefix ?? "DY,";
-      const finalPromptRequest = finalPrompt(state.story, state.shots, prefix, selectedVisualDirection, state.referencePrompts, generationTarget);
-      const systemPrompt = generationSystemPrompt(generationTarget);
-      let generated = normalizeGenerationPrompt(await llm.generate({
-        system: systemPrompt,
-        prompt: finalPromptRequest,
-        temperature: 0.2
-      }), generationTarget, prefix, selectedVisualDirection);
-      const expectedShotCount = state.shots.shots.length;
-      let errors = validateGenerationPrompt(generated, generationTarget, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts, state.shots, state.story);
-      if (errors.length) {
-        generated = normalizeGenerationPrompt(await llm.generate({
-          system: systemPrompt,
-          prompt: `สร้าง prompt ใหม่ให้ครบจากข้อมูลต้นฉบับและแก้ข้อผิดพลาดต่อไปนี้: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วย ${requiredPromptOpening(generationTarget, prefix)} ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\nคำสั่งและข้อมูลต้นฉบับ:\n${finalPromptRequest}\n\nคำตอบก่อนหน้าที่ไม่ผ่าน:\n${generated}`,
-          temperature: 0.1
-        }), generationTarget, prefix, selectedVisualDirection);
-        errors = validateGenerationPrompt(generated, generationTarget, prefix, expectedShotCount, selectedVisualDirection, state.referencePrompts, state.shots, state.story);
-      }
-      if (errors.length) {
-        await saveText(path.join(outputFolder, "05-generation-prompt.failed.txt"), generated);
-        throw new Error(`generation prompt ไม่ผ่านการตรวจ: ${errors.join("; ")}`);
-      }
-      const promptFile = path.join(outputFolder, "05-generation-prompt.txt");
-      await saveText(promptFile, generated.trim());
-      await rm(path.join(outputFolder, "05-generation-prompt.failed.txt"), { force: true });
-      state.completedAt = new Date().toISOString();
-      state.finalPromptFile = promptFile;
-      await checkpoint(outputFolder, state, "complete");
+      const promptFile = await generateFinalPromptArtifact({
+        llm,
+        outputFolder,
+        state,
+        settings,
+        selectedVisualDirection,
+        progressMessage: "กำลังสร้าง generation prompt ต่อจาก checkpoint..."
+      });
       return { outputFolder, status: state.status, promptFile };
     }
 
     throw new Error(`ไม่สามารถ resume จาก status ที่ไม่รู้จัก: ${state.status}`);
+  } catch (error) {
+    await saveFailure(outputFolder, state, error);
+    throw error;
+  }
+}
+
+export async function runRegeneratePromptWorkflow({ terminal, llm, folder = ".", settings }) {
+  const requestedFolder = resolveOutputPath(folder);
+  const { state, folder: outputFolder } = await loadState(requestedFolder);
+  state.outputFolder = outputFolder;
+  state.provider = settings.provider;
+  state.model = settings.model;
+
+  const missing = [
+    ["story", state.story],
+    ["shot list", state.shots],
+    ["reference image prompts", state.referencePrompts]
+  ].filter(([, value]) => !value).map(([label]) => label);
+  if (missing.length) {
+    throw new Error(`ยัง re-generate final prompt ไม่ได้ เพราะ session ขาด ${missing.join(", ")} กรุณาใช้ shot-analysis resume ก่อน`);
+  }
+
+  const selectedVisualDirection = state.selectedVisualDirection
+    || state.analysis?.selectedVisualDirection
+    || state.story?.visualDirection;
+  if (!selectedVisualDirection) {
+    throw new Error("ยัง re-generate final prompt ไม่ได้ เพราะ session ไม่มีข้อมูล visual direction กรุณาใช้ shot-analysis resume ก่อน");
+  }
+
+  const generationTarget = await selectGenerationTarget(terminal, state.generationTarget, { force: true });
+  state.generationTarget = generationTarget;
+  state.lastRegeneratedAt = new Date().toISOString();
+  await checkpoint(outputFolder, state, "generating-prompt");
+
+  try {
+    const promptFile = await generateFinalPromptArtifact({
+      llm,
+      outputFolder,
+      state,
+      settings,
+      selectedVisualDirection,
+      progressMessage: "กำลัง re-generate generation prompt ฉบับสุดท้าย..."
+    });
+    return { outputFolder, status: state.status, promptFile };
   } catch (error) {
     await saveFailure(outputFolder, state, error);
     throw error;
