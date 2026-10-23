@@ -184,14 +184,25 @@ async function generateFinalPromptArtifact({ llm, outputFolder, state, settings,
   return promptFile;
 }
 
-function normalizeExistingReferences(analysis, references = "") {
+export function normalizeExistingReferences(analysis, references = "") {
   const raw = analysis?.references?.length
     ? analysis.references
     : references.split(",").map((item) => item.trim()).filter(Boolean).map((label) => ({ label, description: "ภาพอ้างอิงที่ผู้ใช้ระบุ" }));
-  return raw.map((item, index) => {
+  const prepared = raw.map((item) => {
     const candidate = String(item.pictureId || item.label || "").trim().replace(/^<|>$/g, "");
+    const number = Number(candidate.match(/^Picture (\d+)$/i)?.[1]);
+    return { item, candidate, number };
+  });
+  const numbers = prepared.map((entry) => entry.number);
+  const hasCanonicalSequence = numbers.every(Number.isInteger)
+    && new Set(numbers).size === numbers.length
+    && [...numbers].sort((a, b) => a - b).every((number, index) => number === index + 1);
+  const ordered = hasCanonicalSequence
+    ? [...prepared].sort((a, b) => a.number - b.number)
+    : prepared;
+  return ordered.map(({ item, candidate }, index) => {
     return {
-      pictureId: /^Picture \d+$/i.test(candidate) ? candidate : `Picture ${index + 1}`,
+      pictureId: `Picture ${index + 1}`,
       description: item.description || candidate || "ภาพอ้างอิงที่ผู้ใช้ระบุ"
     };
   });

@@ -270,6 +270,20 @@ test("rejects reference assets that reuse an existing Picture ID", () => {
   assert.match(validateReferencePrompts(value, ["Picture 1"]).join("; "), /ซ้ำกับ reference/);
 });
 
+test("rejects reordered existing Picture IDs", () => {
+  const value = {
+    globalStyle: { visualDirection: "Anime" },
+    existingReferences: [
+      { pictureId: "Picture 2", description: "Location", assetType: "location", locationKey: "room", usedInShots: [1] },
+      { pictureId: "Picture 1", description: "Hero", assetType: "character", linkedSubjects: ["Subject 1"], usedInShots: [1] }
+    ],
+    assets: []
+  };
+  const errors = validateReferencePrompts(value, ["Picture 1", "Picture 2"]).join("; ");
+  assert.match(errors, /ลำดับ 1 ต้องเป็น Picture 1/);
+  assert.match(errors, /ลำดับ 2 ต้องเป็น Picture 2/);
+});
+
 test("rejects incomplete reference coverage for subjects, locations, and objects", () => {
   const shot1 = validShot(1, 0, 5);
   const shot2 = validShot(2, 5, 10);

@@ -243,9 +243,16 @@ export function validateReferencePrompts(value, existingReferenceLabels = [], st
     .map((item) => Number(String(item).replace(/^<|>$/g, "").match(/^Picture (\d+)$/i)?.[1]))
     .filter(Number.isFinite);
   const firstNewPictureNumber = existingNumbers.length ? Math.max(...existingNumbers) + 1 : 1;
-  const returnedExisting = new Set((value.existingReferences || []).map((item) => normalizePictureId(item.pictureId)));
-  for (const expected of existing) {
-    if (!returnedExisting.has(expected)) errors.push(`existingReferences ไม่มี ${expected}`);
+  const returnedExisting = value.existingReferences || [];
+  if (returnedExisting.length !== existingReferenceLabels.length) {
+    errors.push(`existingReferences ต้องมี ${existingReferenceLabels.length} รายการตามข้อมูลเดิม`);
+  }
+  for (let index = 0; index < existingReferenceLabels.length; index += 1) {
+    const expected = existingReferenceLabels[index];
+    const actual = String(returnedExisting[index]?.pictureId || "").trim().replace(/^<|>$/g, "");
+    if (normalizePictureId(actual) !== normalizePictureId(expected)) {
+      errors.push(`existingReferences ลำดับ ${index + 1} ต้องเป็น ${expected} แต่ได้ ${actual || "ไม่มี"}`);
+    }
   }
   const seen = new Set();
   const objectKeys = new Set();

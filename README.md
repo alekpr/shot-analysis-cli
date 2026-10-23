@@ -241,7 +241,7 @@ Storyboard prompt จะกำหนด grid จากจำนวน shot โ�
 
 ระบบสร้างเฉพาะไฟล์ของโมเดลที่เลือกในรอบนั้น และเก็บไฟล์ของโมเดลอื่นไว้ จึงสามารถมีทั้งสองไฟล์ในโปรเจกต์เดียวกันได้ หาก generation prompt ไม่ผ่าน validation ระบบอาจเก็บคำตอบล่าสุดไว้ที่ `<target>-05-generation-prompt.failed.txt` เช่น `minimax-h3-05-generation-prompt.failed.txt` เพื่อช่วยตรวจสอบปัญหา
 
-ระบบตรวจ Image References จาก requirement ของแต่ละ shot: ตัวละครที่มองเห็นทุกตัวต้องมี character sheet, `locationKey` ทุกค่าและ `objectKey` ทุกค่าต้องมี asset รองรับ และ `usedInShots` ต้องครอบคลุมเฉพาะ shot ที่ใช้งานจริง ใน final prompt ระบบตรวจต่อว่า `<Picture N>` หรือ `@ImageN` map กลับไปยัง asset เดิมและปรากฏในทุก shot/beat ที่ระบุไว้ จึงไม่ปล่อยให้ Picture ID ถูกสลับหน้าที่หรือมี prompt ภาพอ้างอิงไม่ครบโดยไม่แจ้ง error
+ระบบตรวจ Image References จาก requirement ของแต่ละ shot: ตัวละครที่มองเห็นทุกตัวต้องมี character sheet, `locationKey` ทุกค่าและ `objectKey` ทุกค่าต้องมี asset รองรับ และ `usedInShots` ต้องครอบคลุมเฉพาะ shot ที่ใช้งานจริง Picture ID ถูกจัดเป็นลำดับต่อเนื่อง `Picture 1` ถึง `Picture N`; ภาพเดิมอยู่ก่อนและ prompt ใหม่เริ่มจากเลขถัดไป Validator ไม่ยอมให้ LLM สลับลำดับเลขกลับมา ใน final prompt ระบบตรวจต่อว่า `<Picture N>` หรือ `@ImageN` map กลับไปยัง asset เดิมและปรากฏในทุก shot/beat ที่ระบุไว้ จึงไม่ปล่อยให้ Picture ID ถูกสลับหน้าที่หรือมี prompt ภาพอ้างอิงไม่ครบโดยไม่แจ้ง error
 
 ## ดูสถานะ
 

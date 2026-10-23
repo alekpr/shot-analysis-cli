@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { generateJson, runNewWorkflow, runRegeneratePromptWorkflow, runResumeWorkflow } from "../src/workflow.js";
+import { generateJson, normalizeExistingReferences, runNewWorkflow, runRegeneratePromptWorkflow, runResumeWorkflow } from "../src/workflow.js";
 
 function fakeShot({ number, startTime, endTime, objective, action, composition, emotion }) {
   return {
@@ -237,6 +237,30 @@ test("generateJson regenerates from the original prompt after repeated malformed
   assert.match(prompts[1], /กรุณาซ่อมให้เป็น JSON object/);
   assert.match(prompts[2], /ORIGINAL STORY REQUEST/);
   assert.match(prompts[2], /สร้าง JSON สำหรับ story ใหม่ทั้งหมด/);
+});
+
+test("normalizes existing Picture IDs into a stable 1-N order without separating descriptions", () => {
+  const sorted = normalizeExistingReferences({
+    references: [
+      { label: "Picture 2", description: "Restaurant" },
+      { label: "Picture 1", description: "Hero" }
+    ]
+  });
+  assert.deepEqual(sorted, [
+    { pictureId: "Picture 1", description: "Hero" },
+    { pictureId: "Picture 2", description: "Restaurant" }
+  ]);
+
+  const repaired = normalizeExistingReferences({
+    references: [
+      { label: "Picture 4", description: "Hero" },
+      { label: "Picture 4", description: "Restaurant" }
+    ]
+  });
+  assert.deepEqual(repaired, [
+    { pictureId: "Picture 1", description: "Hero" },
+    { pictureId: "Picture 2", description: "Restaurant" }
+  ]);
 });
 
 test("generateJson reports the final parse error after exhausting retries", async () => {
