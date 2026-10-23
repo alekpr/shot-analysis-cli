@@ -19,7 +19,7 @@ export const PROVIDERS = {
   },
   deepseek: {
     label: "DeepSeek",
-    defaultModel: "deepseek-chat",
+    defaultModel: "deepseek-v4-flash",
     modelEnv: "DEEPSEEK_MODEL",
     defaultApiKeyEnv: "DEEPSEEK_API_KEY"
   }
@@ -82,7 +82,10 @@ export function resolveConfig(storedConfig, environment = process.env) {
     apiKeyEnv: environment.SHOT_ANALYSIS_API_KEY_ENV
       || (defaultKeyIsAvailable ? providerDefinition.defaultApiKeyEnv : stored.apiKeyEnv)
       || providerDefinition.defaultApiKeyEnv,
-    promptPrefix: environment.SHOT_ANALYSIS_PROMPT_PREFIX ?? stored.promptPrefix ?? "DY,"
+    promptPrefix: environment.SHOT_ANALYSIS_PROMPT_PREFIX ?? stored.promptPrefix ?? "DY,",
+    timeoutMs: Number(environment.SHOT_ANALYSIS_TIMEOUT_MS || stored.timeoutMs || 60_000),
+    retryAttempts: Number(environment.SHOT_ANALYSIS_RETRY_ATTEMPTS || stored.retryAttempts || 4),
+    maxOutputTokens: Number(environment.SHOT_ANALYSIS_MAX_OUTPUT_TOKENS || stored.maxOutputTokens || 32_768)
   };
 }
 
@@ -111,6 +114,15 @@ export function validateConfig(config) {
   }
   if (!config.model || !config.apiKeyEnv) {
     throw new Error("settings ไม่สมบูรณ์ กรุณารัน `shot-analysis config` อีกครั้ง");
+  }
+  if (!Number.isFinite(config.timeoutMs) || config.timeoutMs < 1_000 || config.timeoutMs > 600_000) {
+    throw new Error("SHOT_ANALYSIS_TIMEOUT_MS ต้องอยู่ระหว่าง 1000-600000 ms");
+  }
+  if (!Number.isInteger(config.retryAttempts) || config.retryAttempts < 1 || config.retryAttempts > 10) {
+    throw new Error("SHOT_ANALYSIS_RETRY_ATTEMPTS ต้องเป็นจำนวนเต็ม 1-10");
+  }
+  if (!Number.isInteger(config.maxOutputTokens) || config.maxOutputTokens < 1_024 || config.maxOutputTokens > 131_072) {
+    throw new Error("SHOT_ANALYSIS_MAX_OUTPUT_TOKENS ต้องเป็นจำนวนเต็ม 1024-131072");
   }
   return config;
 }

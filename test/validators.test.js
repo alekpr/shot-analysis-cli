@@ -62,6 +62,23 @@ test("rejects a shot list that does not match the selected count", () => {
   assert.match(validateShots(value, 5, 3).join("; "), /มี 1 shots แต่ผู้ใช้เลือก 3 shots/);
 });
 
+test("rejects shot asset IDs that are not declared in the story manifest", () => {
+  const shot = validShot(1, 0, 5);
+  shot.subjects = ["Subject 9"];
+  shot.referenceNeeds = { locationKey: "unknown-room", objectKeys: ["unknown-prop"] };
+  const story = {
+    characters: [{ id: "Subject 1" }],
+    assetManifest: {
+      locations: [{ id: "known-room" }],
+      objects: [{ id: "known-prop" }]
+    }
+  };
+  const errors = validateShots({ durationSeconds: 5, totalDuration: 5, continuityChecklist: ["state"], shots: [shot] }, 5, 1, story).join("; ");
+  assert.match(errors, /Subject 9/);
+  assert.match(errors, /unknown-room/);
+  assert.match(errors, /unknown-prop/);
+});
+
 test("rejects gaps and a wrong total duration", () => {
   const value = {
     durationSeconds: 15,

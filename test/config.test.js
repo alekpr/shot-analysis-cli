@@ -15,7 +15,10 @@ test("environment selects provider and its model without stored settings", () =>
     provider: "anthropic",
     model: "claude-test-model",
     apiKeyEnv: "ANTHROPIC_API_KEY",
-    promptPrefix: "TEST,"
+    promptPrefix: "TEST,",
+    timeoutMs: 60_000,
+    retryAttempts: 4,
+    maxOutputTokens: 32_768
   });
   assert.equal(validateConfig(config), config);
 });
@@ -34,7 +37,7 @@ test("changing provider does not inherit another provider custom key name", () =
     { provider: "gemini", model: "gemini-old", apiKeyEnv: "CUSTOM_GEMINI_KEY" },
     { SHOT_ANALYSIS_PROVIDER: "deepseek" }
   );
-  assert.equal(config.model, "deepseek-chat");
+  assert.equal(config.model, "deepseek-v4-flash");
   assert.equal(config.apiKeyEnv, "DEEPSEEK_API_KEY");
 });
 

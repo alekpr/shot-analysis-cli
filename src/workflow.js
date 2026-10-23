@@ -1,5 +1,5 @@
 import path from "node:path";
-import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { extractJson, resolveOutputPath, slugify } from "./utils.js";
 import { analysisPrompt, finalPrompt, generationSystemPrompt, referencePromptsPrompt, shotsPrompt, storyboardPrompt, storyPrompt, SYSTEM_PROMPT } from "./prompts.js";
 import { renderAnalysis, renderReferencePrompts, renderShots, renderStoryboardPrompt, renderStory } from "./render.js";
@@ -9,6 +9,9 @@ import { normalizeGenerationPrompt, validateAnalysis, validateGenerationPrompt, 
 import { loadBriefFile } from "./brief.js";
 import { parseShotCountPreference, selectShotCount } from "./shot-count.js";
 import { generationTargetLabel, selectGenerationTarget } from "./generation-target.js";
+import { acquireSessionLock, loadSession, saveSession, SESSION_VERSION } from "./session.js";
+import { renderGenerationPrompt } from "./generation-renderer.js";
+import { estimateTokens, splitShotBatches } from "./prompt-sizing.js";
 
 function requiredPromptOpening(generationTarget, prefix) {
   return generationTarget === "seedance-2.5" ? "REFERENCE_MAPPING:" : `${prefix}subject_definitions:`;
@@ -18,10 +21,54 @@ async function saveText(target, content) {
   await writeFile(target, content.endsWith("\n") ? content : `${content}\n`, "utf8");
 }
 
+const GENERATED_ARTIFACT = /^(?:0[0-5]-|minimax-h3-05-|seedance-2\.5-05-).+\.(?:md|txt)$/;
+
+async function archiveArtifacts(folder, label) {
+  const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);
+  const files = entries.filter((entry) => entry.isFile() && GENERATED_ARTIFACT.test(entry.name));
+  if (!files.length) return null;
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const target = path.join(folder, ".shot-analysis", "history", `${stamp}-${label}`);
+  await mkdir(target, { recursive: true });
+  await Promise.all(files.map((entry) => copyFile(path.join(folder, entry.name), path.join(target, entry.name))));
+  const session = path.join(folder, ".shot-analysis", "session.json");
+  await copyFile(session, path.join(target, "session.json")).catch((error) => {
+    if (error.code !== "ENOENT") throw error;
+  });
+  return target;
+}
+
+async function removeGeneratedArtifacts(folder) {
+  const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);
+  await Promise.all(entries
+    .filter((entry) => entry.isFile() && GENERATED_ARTIFACT.test(entry.name))
+    .map((entry) => rm(path.join(folder, entry.name), { force: true })));
+}
+
+export function invalidateStateForStage(state, stage) {
+  const next = structuredClone(state);
+  const fieldsByStage = {
+    story: ["story", "shots", "referencePrompts", "storyboardPrompt", "generationTarget", "finalPromptFile", "finalPromptFiles", "completedAt"],
+    shots: ["shots", "referencePrompts", "storyboardPrompt", "generationTarget", "finalPromptFile", "finalPromptFiles", "completedAt"],
+    references: ["referencePrompts", "storyboardPrompt", "generationTarget", "finalPromptFile", "finalPromptFiles", "completedAt"],
+    storyboard: ["storyboardPrompt", "generationTarget", "finalPromptFile", "finalPromptFiles", "completedAt"]
+  };
+  const statusByStage = {
+    story: "story-generation",
+    shots: "shots-generation",
+    references: "reference-prompts-generation",
+    storyboard: "storyboard-prompt-generation"
+  };
+  if (!fieldsByStage[stage]) throw new Error(`ไม่รู้จัก stage สำหรับ regenerate: ${stage}`);
+  for (const field of fieldsByStage[stage]) delete next[field];
+  next.status = statusByStage[stage];
+  next.invalidatedAt = new Date().toISOString();
+  next.invalidatedStage = stage;
+  return next;
+}
+
 async function saveState(folder, state) {
-  const hidden = path.join(folder, ".shot-analysis");
-  await mkdir(hidden, { recursive: true });
-  await writeFile(path.join(hidden, "session.json"), `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  await saveSession(folder, state);
 }
 
 async function containsSession(folder) {
@@ -53,7 +100,7 @@ async function findSessionsBelow(folder, depth = 3) {
   return sessions;
 }
 
-async function resolveSessionFolder(requestedFolder) {
+export async function resolveSessionFolder(requestedFolder) {
   const requested = path.resolve(requestedFolder);
   if (await containsSession(requested)) return requested;
 
@@ -80,16 +127,13 @@ async function resolveSessionFolder(requestedFolder) {
 
 async function loadState(requestedFolder) {
   const folder = await resolveSessionFolder(requestedFolder);
-  const target = path.join(folder, ".shot-analysis", "session.json");
-  try {
-    return { state: JSON.parse(await readFile(target, "utf8")), folder };
-  } catch (error) {
-    throw new Error(`อ่าน session ไม่สำเร็จ: ${error.message}`);
-  }
+  const loaded = await loadSession(folder);
+  if (loaded.recovered) console.warn(`session.json เสียหาย ระบบกู้ข้อมูลจาก backup แล้ว: ${loaded.primaryError.message}`);
+  return { state: loaded.state, folder };
 }
 
 async function checkpoint(folder, state, status) {
-  state.version = 2;
+  state.version = SESSION_VERSION;
   state.status = status;
   state.updatedAt = new Date().toISOString();
   delete state.lastError;
@@ -122,23 +166,33 @@ function generationPromptFilename(generationTarget, failed = false) {
 async function generateFinalPromptArtifact({ llm, outputFolder, state, settings, selectedVisualDirection, progressMessage }) {
   const generationTarget = state.generationTarget;
   const prefix = settings.promptPrefix ?? "DY,";
-  const finalPromptRequest = finalPrompt(
-    state.story,
-    state.shots,
-    prefix,
-    selectedVisualDirection,
-    state.referencePrompts,
-    generationTarget
-  );
   const systemPrompt = generationSystemPrompt(generationTarget);
   console.log(`โมเดลปลายทาง: ${generationTargetLabel(generationTarget)}`);
   console.log(progressMessage);
 
-  let generated = normalizeGenerationPrompt(await trackFailure(outputFolder, state, () => llm.generate({
-    system: systemPrompt,
-    prompt: finalPromptRequest,
-    temperature: 0.2
-  })), generationTarget, prefix, selectedVisualDirection);
+  const shotBatches = splitShotBatches(state.shots);
+  if (shotBatches.length > 1) console.log(`งานมี ${state.shots.shots.length} shots ระบบแบ่ง generation เป็น ${shotBatches.length} batches`);
+  const requests = shotBatches.map((batch) => finalPrompt(
+    state.story,
+    batch,
+    prefix,
+    selectedVisualDirection,
+    state.referencePrompts,
+    generationTarget
+  ));
+  const largestRequestTokens = Math.max(...requests.map(estimateTokens));
+  if (largestRequestTokens > 30_000) console.warn(`prompt batch มีขนาดประมาณ ${largestRequestTokens.toLocaleString()} tokens`);
+  const creativeParts = [];
+  for (const request of requests) {
+    creativeParts.push(await trackFailure(outputFolder, state, () => llm.generate({
+      system: systemPrompt,
+      prompt: request,
+      temperature: 0.2
+    })));
+  }
+  const finalPromptRequest = requests.join("\n\n--- NEXT SHOT BATCH ---\n\n");
+  let generated = normalizeGenerationPrompt(creativeParts.join("\n"), generationTarget, prefix, selectedVisualDirection);
+  generated = renderGenerationPrompt({ creativeText: generated, story: state.story, shots: state.shots, prefix, visualDirection: selectedVisualDirection, referencePrompts: state.referencePrompts, generationTarget });
   const expectedShotCount = state.shots.shots.length;
   let errors = validateGenerationPrompt(
     generated,
@@ -156,6 +210,7 @@ async function generateFinalPromptArtifact({ llm, outputFolder, state, settings,
       prompt: `สร้าง prompt ใหม่ให้ครบจากข้อมูลต้นฉบับและแก้ข้อผิดพลาดต่อไปนี้: ${errors.join("; ")}\nคำตอบต้องเริ่มด้วย ${requiredPromptOpening(generationTarget, prefix)} ทันที ห้ามมีช่องว่าง คำอธิบาย Markdown heading หรือ code fence ก่อนหน้า\n\nคำสั่งและข้อมูลต้นฉบับ:\n${finalPromptRequest}\n\nคำตอบก่อนหน้าที่ไม่ผ่าน:\n${generated}`,
       temperature: 0.1
     })), generationTarget, prefix, selectedVisualDirection);
+    generated = renderGenerationPrompt({ creativeText: generated, story: state.story, shots: state.shots, prefix, visualDirection: selectedVisualDirection, referencePrompts: state.referencePrompts, generationTarget });
     errors = validateGenerationPrompt(
       generated,
       generationTarget,
@@ -319,10 +374,16 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
     if (error.code !== "ENOENT") throw error;
   }
   await mkdir(outputFolder, { recursive: true });
+  const releaseLock = await acquireSessionLock(outputFolder);
+  try {
+  if (await containsSession(outputFolder)) {
+    await archiveArtifacts(outputFolder, "before-overwrite");
+    await removeGeneratedArtifacts(outputFolder);
+  }
 
   const input = { projectName, brief, durationSeconds, requestedShotCount, targetPlatform, aspectRatio, references, ...(briefFile ? { briefFile: briefFile.file } : {}) };
   const answers = {};
-  const state = { version: 2, status: "analyzing", provider: settings.provider, model: settings.model, input, answers, outputFolder };
+  const state = { version: SESSION_VERSION, status: "analyzing", provider: settings.provider, model: settings.model, input, answers, outputFolder };
   await saveText(path.join(outputFolder, "00-brief.md"), `# Brief: ${projectName}\n\n${brief}\n\n- Brief source: ${briefFile?.file || "Terminal"}\n- Duration: ${durationSeconds}s\n- Shot preference: ${requestedShotCount ? `${requestedShotCount} shots` : "ให้ LLM แนะนำ"}\n- Platform: ${targetPlatform}\n- Aspect ratio: ${aspectRatio}\n- References: ${references || "ไม่มี"}\n`);
   await saveState(outputFolder, state);
 
@@ -390,13 +451,13 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
   if (!storyApproved) return { outputFolder, status: state.status };
 
   console.log("กำลังแตกโครงเรื่องเป็น shot list...");
-  let shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story, `สร้างจำนวน ${selectedShotCount} shots เท่านั้น`), (value) => validateShots(value, story.durationSeconds, selectedShotCount), "shot list"));
+  let shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story, `สร้างจำนวน ${selectedShotCount} shots เท่านั้น`), (value) => validateShots(value, story.durationSeconds, selectedShotCount, story), "shot list"));
   const shotsFile = path.join(outputFolder, "03-shots.md");
   await saveText(shotsFile, renderShots(shots));
   state.shots = shots;
   await checkpoint(outputFolder, state, "shots-review");
   const shotsApproved = await reviewDocument(terminal, "shot list", shotsFile, async (notes) => {
-    shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story, `${notes}\nต้องคงจำนวน ${selectedShotCount} shots เท่านั้น`), (value) => validateShots(value, story.durationSeconds, selectedShotCount), "shot list"));
+    shots = await trackFailure(outputFolder, state, () => generateJson(llm, shotsPrompt(story, `${notes}\nต้องคงจำนวน ${selectedShotCount} shots เท่านั้น`), (value) => validateShots(value, story.durationSeconds, selectedShotCount, story), "shot list"));
     await saveText(shotsFile, renderShots(shots));
     state.shots = shots;
     await checkpoint(outputFolder, state, "shots-review");
@@ -504,9 +565,12 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
     progressMessage: "กำลังสร้าง generation prompt ฉบับสุดท้าย..."
   });
   return { outputFolder, status: state.status, promptFile };
+  } finally {
+    await releaseLock();
+  }
 }
 
-export async function runResumeWorkflow({ terminal, llm, folder = ".", settings }) {
+async function runResumeWorkflowUnlocked({ terminal, llm, folder = ".", settings }) {
   const requestedFolder = resolveOutputPath(folder);
   const { state, folder: outputFolder } = await loadState(requestedFolder);
   state.outputFolder = outputFolder;
@@ -601,13 +665,13 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
       const shotsFile = path.join(outputFolder, "03-shots.md");
       if (!shots) {
         console.log("กำลังสร้าง shot list ต่อ...");
-        shots = await generateJson(llm, shotsPrompt(state.story, `สร้างจำนวน ${selectedShotCount} shots เท่านั้น`), (value) => validateShots(value, state.story.durationSeconds, selectedShotCount), "shot list");
+        shots = await generateJson(llm, shotsPrompt(state.story, `สร้างจำนวน ${selectedShotCount} shots เท่านั้น`), (value) => validateShots(value, state.story.durationSeconds, selectedShotCount, state.story), "shot list");
         state.shots = shots;
         await saveText(shotsFile, renderShots(shots));
         await checkpoint(outputFolder, state, "shots-review");
       }
       const approved = await reviewDocument(terminal, "shot list", shotsFile, async (notes) => {
-        shots = await generateJson(llm, shotsPrompt(state.story, `${notes}\nต้องคงจำนวน ${selectedShotCount} shots เท่านั้น`), (value) => validateShots(value, state.story.durationSeconds, selectedShotCount), "shot list");
+        shots = await generateJson(llm, shotsPrompt(state.story, `${notes}\nต้องคงจำนวน ${selectedShotCount} shots เท่านั้น`), (value) => validateShots(value, state.story.durationSeconds, selectedShotCount, state.story), "shot list");
         state.shots = shots;
         await saveText(shotsFile, renderShots(shots));
         await checkpoint(outputFolder, state, "shots-review");
@@ -739,7 +803,18 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
   }
 }
 
-export async function runRegeneratePromptWorkflow({ terminal, llm, folder = ".", settings }) {
+export async function runResumeWorkflow(options) {
+  const requestedFolder = resolveOutputPath(options.folder || ".");
+  const outputFolder = await resolveSessionFolder(requestedFolder);
+  const releaseLock = await acquireSessionLock(outputFolder);
+  try {
+    return await runResumeWorkflowUnlocked({ ...options, folder: outputFolder });
+  } finally {
+    await releaseLock();
+  }
+}
+
+async function runRegeneratePromptWorkflowUnlocked({ terminal, llm, folder = ".", settings }) {
   const requestedFolder = resolveOutputPath(folder);
   const { state, folder: outputFolder } = await loadState(requestedFolder);
   state.outputFolder = outputFolder;
@@ -780,5 +855,60 @@ export async function runRegeneratePromptWorkflow({ terminal, llm, folder = ".",
   } catch (error) {
     await saveFailure(outputFolder, state, error);
     throw error;
+  }
+}
+
+export async function runRegeneratePromptWorkflow(options) {
+  const requestedFolder = resolveOutputPath(options.folder || ".");
+  const outputFolder = await resolveSessionFolder(requestedFolder);
+  const releaseLock = await acquireSessionLock(outputFolder);
+  try {
+    return await runRegeneratePromptWorkflowUnlocked({ ...options, folder: outputFolder });
+  } finally {
+    await releaseLock();
+  }
+}
+
+export async function runRegenerateStageWorkflow({ terminal, llm, folder = ".", settings, stage }) {
+  if (stage === "final") return runRegeneratePromptWorkflow({ terminal, llm, folder, settings });
+  const requestedFolder = resolveOutputPath(folder);
+  const outputFolder = await resolveSessionFolder(requestedFolder);
+  const releaseLock = await acquireSessionLock(outputFolder);
+  try {
+    const { state } = await loadState(outputFolder);
+    const historyFolder = await archiveArtifacts(outputFolder, `before-regenerate-${stage}`);
+    const invalidated = invalidateStateForStage(state, stage);
+    invalidated.lastHistoryFolder = historyFolder ? path.relative(outputFolder, historyFolder) : undefined;
+    await checkpoint(outputFolder, invalidated, invalidated.status);
+  } finally {
+    await releaseLock();
+  }
+  return runResumeWorkflow({ terminal, llm, folder: outputFolder, settings });
+}
+
+export async function runRollbackWorkflow({ folder = ".", revision = "latest" }) {
+  const outputFolder = await resolveSessionFolder(resolveOutputPath(folder));
+  const releaseLock = await acquireSessionLock(outputFolder);
+  try {
+    const historyRoot = path.join(outputFolder, ".shot-analysis", "history");
+    const revisions = (await readdir(historyRoot, { withFileTypes: true }).catch(() => []))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    const selected = revision === "latest" ? revisions.at(-1) : revisions.find((item) => item === revision);
+    if (!selected) throw new Error(`ไม่พบ revision ${revision} ใน ${historyRoot}`);
+    const source = path.join(historyRoot, selected);
+    const archivedSession = JSON.parse(await readFile(path.join(source, "session.json"), "utf8"));
+    await removeGeneratedArtifacts(outputFolder);
+    const files = await readdir(source, { withFileTypes: true });
+    await Promise.all(files
+      .filter((entry) => entry.isFile() && entry.name !== "session.json")
+      .map((entry) => copyFile(path.join(source, entry.name), path.join(outputFolder, entry.name))));
+    archivedSession.lastRollbackAt = new Date().toISOString();
+    archivedSession.lastRollbackRevision = selected;
+    await saveSession(outputFolder, archivedSession);
+    return { outputFolder, status: archivedSession.status, revision: selected };
+  } finally {
+    await releaseLock();
   }
 }

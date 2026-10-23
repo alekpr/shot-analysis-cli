@@ -1,13 +1,13 @@
-import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig, loadEnvFiles, PROVIDERS, saveConfig, validateConfig } from "./config.js";
 import { LlmClient } from "./llm.js";
 import { createTerminal } from "./terminal.js";
 import { parseArgs } from "./utils.js";
-import { runNewWorkflow, runRegeneratePromptWorkflow, runResumeWorkflow } from "./workflow.js";
+import { resolveSessionFolder, runNewWorkflow, runRegenerateStageWorkflow, runResumeWorkflow, runRollbackWorkflow } from "./workflow.js";
 import { generationTargetLabel } from "./generation-target.js";
+import { loadSession } from "./session.js";
 
-const HELP = `shot-analysis-cli\n\nคำสั่ง:\n  shot-analysis config                 ตั้งค่า LLM provider และ model\n  shot-analysis new [options]          เริ่มโปรเจกต์คลิปแบบ interactive\n  shot-analysis resume [folder]        ทำงานต่อจาก checkpoint ล่าสุด\n  shot-analysis regenerate [folder]    สร้าง final prompt ใหม่จากข้อมูลที่อนุมัติแล้ว\n  shot-analysis status [folder]        ดูสถานะโปรเจกต์\n\noptions ของ new:\n  --brief <file>                        อ่าน brief จากไฟล์ข้อความ\n  --brief-file <file>                   alias ของ --brief\n  --output <folder>                     กำหนดโฟลเดอร์เอกสารโปรเจกต์\n\nหากไม่ระบุ --brief ระบบจะให้เลือกพิมพ์ brief หรืออ่านจากไฟล์ รองรับ .txt, .md, .json, .yaml และไฟล์ข้อความ UTF-8\nตั้ง provider, model และ API keys ผ่าน .env ได้ ค่าใน .env มีลำดับความสำคัญสูงกว่า settings`;
+const HELP = `shot-analysis-cli\n\nคำสั่ง:\n  shot-analysis config                         ตั้งค่า LLM provider และ model\n  shot-analysis doctor                         ตรวจ API key, model และ JSON output\n  shot-analysis new [options]                  เริ่มโปรเจกต์คลิปแบบ interactive\n  shot-analysis resume [folder]                ทำงานต่อจาก checkpoint ล่าสุด\n  shot-analysis regenerate [folder]            สร้าง final prompt ใหม่ (รองรับรูปแบบเดิม)\n  shot-analysis regenerate <stage> [folder]    สร้างใหม่จาก story|shots|references|storyboard|final\n  shot-analysis rollback [folder] [revision]   ย้อนกลับ revision ล่าสุดหรือ revision ที่ระบุ\n  shot-analysis status [folder] [--json]       ดูสถานะโปรเจกต์\n\noptions ของ new:\n  --brief <file>                                อ่าน brief จากไฟล์ข้อความ\n  --brief-file <file>                           alias ของ --brief\n  --output <folder>                             กำหนดโฟลเดอร์เอกสารโปรเจกต์\n\nหากไม่ระบุ --brief ระบบจะให้เลือกพิมพ์ brief หรืออ่านจากไฟล์ รองรับ .txt, .md, .json, .yaml และไฟล์ข้อความ UTF-8\nตั้ง provider, model และ API keys ผ่าน .env ได้ ค่าใน .env มีลำดับความสำคัญสูงกว่า settings`;
 
 async function configure(terminal) {
   const existing = await loadConfig();
@@ -26,10 +26,13 @@ async function configure(terminal) {
   console.log(`ตั้ง API key ก่อนใช้งาน: export ${apiKeyEnv}=\"...\"`);
 }
 
-async function showStatus(folder = ".") {
-  const target = path.resolve(folder, ".shot-analysis", "session.json");
-  await access(target);
-  const state = JSON.parse(await readFile(target, "utf8"));
+async function showStatus(folder = ".", { json = false } = {}) {
+  const resolved = await resolveSessionFolder(path.resolve(folder));
+  const { state } = await loadSession(resolved);
+  if (json) {
+    console.log(JSON.stringify(state, null, 2));
+    return;
+  }
   console.log(`Project: ${state.input?.projectName || "-"}`);
   console.log(`Status: ${state.status}`);
   console.log(`Provider: ${state.provider} / ${state.model}`);
@@ -56,18 +59,36 @@ export async function main(argv) {
       return;
     }
     if (command === "status") {
-      await showStatus(argv[1] || ".");
+      const statusFolder = argv.slice(1).find((item) => !item.startsWith("--")) || ".";
+      await showStatus(statusFolder, { json: args.json === true });
       return;
     }
-    if (["new", "resume", "regenerate"].includes(command)) {
+    if (command === "rollback") {
+      const result = await runRollbackWorkflow({ folder: argv[1] || ".", revision: argv[2] || "latest" });
+      console.log(`ย้อนกลับ revision แล้ว: ${result.revision}`);
+      console.log(`เอกสารอยู่ที่: ${result.outputFolder}`);
+      return;
+    }
+    if (["doctor", "new", "resume", "regenerate"].includes(command)) {
       const settings = validateConfig(await loadConfig());
       const llm = new LlmClient(settings, envInfo);
       llm.assertConfigured();
+      if (command === "doctor") {
+        console.log(`กำลังตรวจ ${settings.provider} / ${settings.model}...`);
+        const diagnosis = await llm.diagnose();
+        console.log(`ผ่าน: API key, model และ JSON output ใช้งานได้ (${diagnosis.latencyMs}ms)`);
+        return;
+      }
       const result = command === "new"
         ? await runNewWorkflow({ terminal, llm, args, settings })
         : command === "resume"
           ? await runResumeWorkflow({ terminal, llm, folder: argv[1] || ".", settings })
-          : await runRegeneratePromptWorkflow({ terminal, llm, folder: argv[1] || ".", settings });
+          : (() => {
+              const stages = new Set(["story", "shots", "references", "storyboard", "final"]);
+              const stage = stages.has(argv[1]) ? argv[1] : "final";
+              const folder = stages.has(argv[1]) ? argv[2] || "." : argv[1] || ".";
+              return runRegenerateStageWorkflow({ terminal, llm, folder, settings, stage });
+            })();
       console.log(`\nสถานะ: ${result.status}`);
       console.log(`เอกสารอยู่ที่: ${result.outputFolder}`);
       if (result.promptFile) console.log(`Prompt: ${result.promptFile}`);

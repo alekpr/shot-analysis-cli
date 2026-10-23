@@ -75,6 +75,7 @@ export function storyPrompt(analysis, answers, revision = "") {
   "emotionalArc":[{"phase":"string","emotion":"string","storyFunction":"string"}],
   "characters":[{"id":"Subject 1","name":"string","role":"string","description":"string","continuityRules":["string"]}],
   "setting":{"description":"string","continuityRules":["string"]},
+  "assetManifest":{"locations":[{"id":"stable-location-id","description":"string"}],"objects":[{"id":"stable-object-id","description":"string","continuityRules":["string"]}]},
   "hook":"string",
   "buildUp":["string"],
   "climax":"string",
@@ -86,7 +87,7 @@ export function storyPrompt(analysis, answers, revision = "") {
   "soundDirection":"string",
   "risks":["string"],
   "rationale":"string"
-}\nต้องใช้ selectedVisualDirection จาก ANALYSIS เป็นข้อกำหนดด้านภาพของเรื่อง และใช้ selectedCores ทุก Core ตาม role ที่ผู้ใช้เลือก โดยให้ primary เป็นแกนขับเคลื่อนเรื่องและ secondary เป็นแกนสนับสนุน ห้ามแทนด้วย Core อื่น วางจังหวะเรื่องให้รองรับ ANALYSIS.selectedShotCount โดยแต่ละ shot มีหน้าที่ต่างกัน ต้องบอกความสัมพันธ์เหตุและผลชัดเจน ให้จุดเริ่ม กลาง และจบพอดีกับระยะเวลา`;
+}\nต้องใช้ selectedVisualDirection จาก ANALYSIS เป็นข้อกำหนดด้านภาพของเรื่อง และใช้ selectedCores ทุก Core ตาม role ที่ผู้ใช้เลือก โดยให้ primary เป็นแกนขับเคลื่อนเรื่องและ secondary เป็นแกนสนับสนุน ห้ามแทนด้วย Core อื่น วางจังหวะเรื่องให้รองรับ ANALYSIS.selectedShotCount โดยแต่ละ shot มีหน้าที่ต่างกัน ต้องบอกความสัมพันธ์เหตุและผลชัดเจน ให้จุดเริ่ม กลาง และจบพอดีกับระยะเวลา\nassetManifest ต้องกำหนด stable ID ของทุกสถานที่และวัตถุที่มีผลต่อ action/continuity ก่อนแตก shot list หากไม่มีวัตถุสำคัญให้ใช้ objects เป็น [] และห้ามเพิ่ม asset นอก manifest ในขั้น shot list`;
 }
 
 export function shotsPrompt(story, revision = "") {

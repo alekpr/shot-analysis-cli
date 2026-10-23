@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { generateJson, normalizeExistingReferences, runNewWorkflow, runRegeneratePromptWorkflow, runResumeWorkflow } from "../src/workflow.js";
+import { generateJson, invalidateStateForStage, normalizeExistingReferences, runNewWorkflow, runRegeneratePromptWorkflow, runResumeWorkflow, runRollbackWorkflow } from "../src/workflow.js";
+import { saveSession } from "../src/session.js";
 
 function fakeShot({ number, startTime, endTime, objective, action, composition, emotion }) {
   return {
@@ -78,6 +79,10 @@ class FakeLlm {
         emotionalArc: [{ phase: "ending", emotion: "acceptance", storyFunction: "closure" }],
         characters: [{ id: "Subject 1", name: "A", role: "lead", description: "woman", continuityRules: ["same coat"] }],
         setting: { description: "restaurant", continuityRules: ["warm light"] },
+        assetManifest: {
+          locations: [{ id: "restaurant-main-room", description: "warm restaurant dining room" }],
+          objects: [{ id: "restaurant-table", description: "dark wood table", continuityRules: ["same position"] }]
+        },
         hook: "She will not meet his eyes.",
         buildUp: ["He reaches for her hand."],
         climax: "She withdraws her hand.",
@@ -144,6 +149,34 @@ class FakeLlm {
     return `DY,subject_definitions:\n<Picture 1> maps to character asset A character sheet for <Subject 1>, preserving character consistency.\n<Picture 2> maps to location asset Restaurant with locationKey restaurant-main-room, preserving location consistency.\n<Picture 3> maps to object asset Table with objectKey restaurant-table, preserving prop continuity.\n<Subject 1> is a woman in a Live-action cinematic style with a melancholic tone, matching <Picture 1>.\nsummary:\nVisual direction: Live-action cinematic; Mood: melancholic\nretention_analysis:\nUse <Picture 1>, <Picture 2>, and <Picture 3>.\ndetailed_description:\n[Shot 1] <Subject 1> looks away using <Picture 1>, <Picture 2>, and <Picture 3>.${detail}\n[Shot 2] At 00:05.000 <Subject 1> withdraws her hand using <Picture 1>, <Picture 2>, and <Picture 3>.${detail}\n[Shot 3] At 00:10.000 <Subject 1> leaves using <Picture 1> and <Picture 2>.${detail}\noverall_soundscape:\nQuiet restaurant ambience.\nnon_diegetic_music:\nNone.`;
   }
 }
+
+test("invalidating a stage removes every downstream artifact from session state", () => {
+  const state = { status: "complete", story: {}, shots: {}, referencePrompts: {}, storyboardPrompt: {}, finalPromptFile: "a", finalPromptFiles: { a: "a" }, completedAt: "now" };
+  const next = invalidateStateForStage(state, "shots");
+  assert.equal(next.status, "shots-generation");
+  assert.ok(next.story);
+  assert.equal(next.shots, undefined);
+  assert.equal(next.referencePrompts, undefined);
+  assert.equal(next.storyboardPrompt, undefined);
+  assert.equal(next.finalPromptFiles, undefined);
+  assert.ok(state.shots);
+});
+
+test("rollback restores archived artifacts and session", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shot-analysis-rollback-test-"));
+  const revision = "2026-10-23-before-regenerate-shots";
+  const revisionFolder = path.join(root, ".shot-analysis", "history", revision);
+  await mkdir(revisionFolder, { recursive: true });
+  await saveSession(root, { version: 4, status: "complete", input: { projectName: "Current" } });
+  await writeFile(path.join(root, "02-story.md"), "current", "utf8");
+  await writeFile(path.join(revisionFolder, "02-story.md"), "archived", "utf8");
+  await writeFile(path.join(revisionFolder, "session.json"), JSON.stringify({ version: 4, status: "story-review", input: { projectName: "Archived" } }), "utf8");
+  const result = await runRollbackWorkflow({ folder: root, revision });
+  assert.equal(result.status, "story-review");
+  assert.equal(await readFile(path.join(root, "02-story.md"), "utf8"), "archived");
+  const restored = JSON.parse(await readFile(path.join(root, ".shot-analysis", "session.json"), "utf8"));
+  assert.equal(restored.input.projectName, "Archived");
+});
 
 class FailFinalLlm extends FakeLlm {
   async generate(options) {
@@ -401,8 +434,8 @@ test("regenerate rebuilds only the final prompt and keeps outputs for both targe
   assert.ok((await readFile(path.join(root, "seedance-2.5-05-generation-prompt.txt"), "utf8")).startsWith("REFERENCE_MAPPING:"));
   const session = JSON.parse(await readFile(path.join(root, ".shot-analysis/session.json"), "utf8"));
   assert.equal(session.generationTarget, "seedance-2.5");
-  assert.equal(session.finalPromptFiles["minimax-h3"], path.join(root, "minimax-h3-05-generation-prompt.txt"));
-  assert.equal(session.finalPromptFiles["seedance-2.5"], path.join(root, "seedance-2.5-05-generation-prompt.txt"));
+  assert.equal(session.finalPromptFiles["minimax-h3"], "minimax-h3-05-generation-prompt.txt");
+  assert.equal(session.finalPromptFiles["seedance-2.5"], "seedance-2.5-05-generation-prompt.txt");
 });
 
 test("storyboard review can revise image references and propagate the latest version", async () => {

@@ -139,13 +139,26 @@ export function validateStory(value) {
   }
   if (!Array.isArray(value?.characters) || value.characters.length === 0) errors.push("story ต้องมี characters");
   if (!value?.visualDirection?.label) errors.push("story ต้องมี visualDirection");
+  if (!Array.isArray(value?.assetManifest?.locations) || value.assetManifest.locations.length === 0) {
+    errors.push("story ต้องมี assetManifest.locations");
+  }
+  if (!Array.isArray(value?.assetManifest?.objects)) errors.push("story ต้องมี assetManifest.objects เป็น array");
+  for (const type of ["locations", "objects"]) {
+    const items = value?.assetManifest?.[type] || [];
+    const ids = items.map((item) => String(item.id || "").trim()).filter(Boolean);
+    if (ids.length !== items.length) errors.push(`assetManifest.${type} ทุก item ต้องมี id`);
+    if (new Set(ids).size !== ids.length) errors.push(`assetManifest.${type} มี id ซ้ำ`);
+  }
   return errors;
 }
 
-export function validateShots(value, expectedDuration, expectedShotCount) {
+export function validateShots(value, expectedDuration, expectedShotCount, story) {
   const errors = [];
   const shots = value?.shots;
   if (!Array.isArray(shots) || shots.length === 0) return ["shot list ไม่มี shots"];
+  const subjectIds = new Set((story?.characters || []).map((item) => String(item.id || "").trim()).filter(Boolean));
+  const locationIds = new Set((story?.assetManifest?.locations || []).map((item) => String(item.id || "").trim()).filter(Boolean));
+  const objectIds = new Set((story?.assetManifest?.objects || []).map((item) => String(item.id || "").trim()).filter(Boolean));
   let expectedStart = 0;
   shots.forEach((shot, index) => {
     const shotLabel = `Shot ${index + 1}`;
@@ -169,8 +182,21 @@ export function validateShots(value, expectedDuration, expectedShotCount) {
     if (index === 0 && shot.storyPhase !== "hook") errors.push("Shot 1 ต้องมี storyPhase เป็น hook");
     if (!Array.isArray(shot.subjects)) errors.push(`${shotLabel} ต้องมี subjects เป็น array`);
     if (!Array.isArray(shot.offscreenSubjects)) errors.push(`${shotLabel} ต้องมี offscreenSubjects เป็น array`);
+    if (subjectIds.size) {
+      for (const subject of [...(shot.subjects || []), ...(shot.offscreenSubjects || [])]) {
+        if (!subjectIds.has(subject)) errors.push(`${shotLabel} อ้าง subject ที่ไม่มีใน STORY: ${subject}`);
+      }
+    }
     if (!String(shot.referenceNeeds?.locationKey || "").trim()) errors.push(`${shotLabel} ไม่มี referenceNeeds.locationKey`);
     if (!Array.isArray(shot.referenceNeeds?.objectKeys)) errors.push(`${shotLabel} ต้องมี referenceNeeds.objectKeys เป็น array`);
+    if (locationIds.size && shot.referenceNeeds?.locationKey && !locationIds.has(shot.referenceNeeds.locationKey)) {
+      errors.push(`${shotLabel} อ้าง locationKey ที่ไม่มีใน assetManifest: ${shot.referenceNeeds.locationKey}`);
+    }
+    if (objectIds.size) {
+      for (const objectKey of shot.referenceNeeds?.objectKeys || []) {
+        if (!objectIds.has(objectKey)) errors.push(`${shotLabel} อ้าง objectKey ที่ไม่มีใน assetManifest: ${objectKey}`);
+      }
+    }
     const objectKeys = (shot.referenceNeeds?.objectKeys || []).map(normalizeComparison).filter(Boolean);
     if (new Set(objectKeys).size !== objectKeys.length) errors.push(`${shotLabel} มี referenceNeeds.objectKeys ซ้ำกัน`);
     const visibleSubjects = new Set(shot.subjects || []);

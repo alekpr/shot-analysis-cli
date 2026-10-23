@@ -85,7 +85,10 @@ SHOT_ANALYSIS_PROVIDER=gemini
 
 GEMINI_MODEL=gemini-3.5-flash
 ANTHROPIC_MODEL=claude-sonnet-5-5
-DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_MODEL=deepseek-v4-flash
+SHOT_ANALYSIS_TIMEOUT_MS=60000
+SHOT_ANALYSIS_RETRY_ATTEMPTS=4
+SHOT_ANALYSIS_MAX_OUTPUT_TOKENS=32768
 
 SHOT_ANALYSIS_PROMPT_PREFIX=DY,
 
@@ -249,6 +252,7 @@ Storyboard prompt จะกำหนด grid จากจำนวน shot โ�
 
 ```bash
 shot-analysis status ./projects/restaurant-clip
+shot-analysis status ./projects/restaurant-clip --json
 ```
 
 ข้อมูลที่แสดงประกอบด้วยชื่อโปรเจกต์ สถานะ provider/model โฟลเดอร์ผลลัพธ์ และ error ล่าสุดถ้ามี
@@ -263,15 +267,26 @@ shot-analysis resume ./projects/restaurant-clip
 
 ระบบจะอ่าน `.shot-analysis/session.json` และทำต่อจากขั้น analysis, story, shot list, reference image prompts, storyboard prompt, การเลือกโมเดลปลายทาง หรือ final prompt โดยไม่สร้างขั้นที่ผ่านการอนุมัติแล้วซ้ำ หากเลือก MiniMax H3 หรือ Seedance 2.5 ไปแล้ว ระบบจะใช้ตัวเลือกเดิมเมื่อ resume
 
-## สร้าง final prompt ใหม่หลังจบ workflow
+## สร้างงานใหม่เป็นรายขั้นตอนและย้อน revision
 
 เมื่อต้องการสร้างเฉพาะ generation prompt ขั้นสุดท้ายใหม่ ให้ใช้:
 
 ```bash
 shot-analysis regenerate ./projects/restaurant-clip
+shot-analysis regenerate shots ./projects/restaurant-clip
+shot-analysis regenerate references ./projects/restaurant-clip
+shot-analysis regenerate storyboard ./projects/restaurant-clip
+shot-analysis regenerate final ./projects/restaurant-clip
 ```
 
-ระบบจะถามให้เลือก `MiniMax H3` หรือ `Seedance 2.5` ใหม่ทุกครั้ง แล้วใช้ Story, Shot List และ Image References ฉบับล่าสุดที่อนุมัติไว้ใน session โดยไม่สร้างขั้นก่อนหน้าซ้ำ หากเลือก target เดิม ระบบจะเขียนทับไฟล์ของ target นั้น หากเลือกอีก target ระบบจะสร้างไฟล์เพิ่มและเก็บไฟล์เดิมไว้
+เมื่อ regenerate ขั้นก่อนหน้า ระบบจะล้าง state ของขั้นที่ตามมาและสร้างใหม่ตาม dependency ก่อนแก้ไข ระบบเก็บเอกสารและ session เดิมไว้ใน `.shot-analysis/history/` สามารถย้อน revision ล่าสุดได้ด้วย:
+
+```bash
+shot-analysis rollback ./projects/restaurant-clip
+shot-analysis rollback ./projects/restaurant-clip REVISION_NAME
+```
+
+การ regenerate final จะถามให้เลือก `MiniMax H3` หรือ `Seedance 2.5` ใหม่ทุกครั้ง แล้วใช้ Story, Shot List และ Image References ฉบับล่าสุดที่อนุมัติไว้ใน session
 
 สามารถเปลี่ยน provider หรือ model ใน `.env` หรือด้วย `shot-analysis config` ก่อน resume ได้ หากระบุโฟลเดอร์แม่และพบ session เพียงโปรเจกต์เดียวในโฟลเดอร์ย่อย ระบบจะค้นหาให้โดยอัตโนมัติ หากพบหลาย session ระบบจะแสดง path ที่พบเพื่อให้ระบุโปรเจกต์โดยตรง
 
@@ -287,12 +302,16 @@ cp -R ./projects/restaurant-clip /path/on/another-machine/
 | --- | --- |
 | `shot-analysis --help` | แสดงคู่มือคำสั่งแบบย่อ |
 | `shot-analysis config` | ตั้งค่า provider และ model แบบ interactive |
+| `shot-analysis doctor` | ตรวจ API key, model และ JSON output กับ provider จริง |
 | `shot-analysis new` | เริ่มโปรเจกต์ใหม่ |
 | `shot-analysis new --brief FILE` | เริ่มโปรเจกต์จากไฟล์ brief |
 | `shot-analysis new --brief FILE --output DIR` | ระบุไฟล์ brief และโฟลเดอร์ผลลัพธ์ |
 | `shot-analysis status DIR` | ดูสถานะ session ของโปรเจกต์ |
+| `shot-analysis status DIR --json` | แสดง session state สำหรับ script หรือ automation |
 | `shot-analysis resume DIR` | ทำงานต่อจาก checkpoint |
 | `shot-analysis regenerate DIR` | สร้างเฉพาะ final generation prompt ใหม่และเลือก target อีกครั้ง |
+| `shot-analysis regenerate STAGE DIR` | สร้างใหม่จาก `story`, `shots`, `references`, `storyboard` หรือ `final` |
+| `shot-analysis rollback DIR [REVISION]` | ย้อนเอกสารและ session จาก history |
 
 ## แก้ปัญหาเบื้องต้น
 
@@ -349,5 +368,6 @@ npm pack --dry-run
 ## เอกสารเพิ่มเติม
 
 - [แผนการพัฒนา](./docs/PLAN.md)
+- [Improvement roadmap และสถานะงาน](./docs/IMPROVEMENT-ROADMAP.md)
 - [หลักการสร้าง Production Shot List](./docs/SHOT-LIST-GUIDE.md)
 - [ตัวอย่าง Environment variables](./.env.example)
