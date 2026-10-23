@@ -232,14 +232,16 @@ Storyboard prompt จะกำหนด grid จากจำนวน shot โ�
 | `00-brief.md` | Brief ข้อมูลพื้นฐาน และจำนวน shot ที่ผู้ใช้ระบุหรือสถานะให้ LLM แนะนำ |
 | `01-analysis.md` | ผลวิเคราะห์ จำนวน shot ที่ LLM แนะนำและผู้ใช้เลือก ข้อมูลภาพ mood และ Core |
 | `02-story.md` | โครงเรื่องที่ผ่านขั้น review |
-| `03-shots.md` | Production shot list พร้อม cinematic intent, attention path, visual payoff, beat, geography, visible state, timed action, causal link, กล้อง, เสียง และ continuity bridge |
-| `04-reference-image-prompts.md` | Prompt สำหรับ Character, Location และ Object references โดยแยกวัตถุแต่ละชนิดเป็นคนละ Picture |
+| `03-shots.md` | Production shot list พร้อม cinematic intent, attention path, visual payoff, beat, geography, visible state, timed action, causal link, กล้อง, เสียง, continuity bridge และ `referenceNeeds` ที่ระบุ location/object key ต่อ shot |
+| `04-reference-image-prompts.md` | Prompt สำหรับ Character, Location และ Object references พร้อมจำนวน prompt, Picture-to-asset mapping และ shots ที่ใช้ โดยแยกวัตถุแต่ละชนิดเป็นคนละ Picture |
 | `04-storyboard-keyimage-prompt.md` | Master Prompt สำหรับสร้าง Storyboard contact sheet หนึ่งภาพ พร้อมหนึ่ง keyframe ต่อ shot, grid, panel map, reference mapping และ negative prompt |
 | `minimax-h3-05-generation-prompt.txt` | Generation prompt ฉบับรวมสำหรับ MiniMax H3 พร้อมรายละเอียดกล้อง geography ลำดับ action สีหน้า แสง เสียง บทพูด transition และ continuity |
 | `seedance-2.5-05-generation-prompt.txt` | Generation prompt ฉบับรวมสำหรับ Seedance 2.5 ในรูปแบบ Reference Mapping, timecoded beats และ global constraints |
 | `.shot-analysis/session.json` | สถานะและข้อมูล checkpoint สำหรับ `status` และ `resume` |
 
 ระบบสร้างเฉพาะไฟล์ของโมเดลที่เลือกในรอบนั้น และเก็บไฟล์ของโมเดลอื่นไว้ จึงสามารถมีทั้งสองไฟล์ในโปรเจกต์เดียวกันได้ หาก generation prompt ไม่ผ่าน validation ระบบอาจเก็บคำตอบล่าสุดไว้ที่ `<target>-05-generation-prompt.failed.txt` เช่น `minimax-h3-05-generation-prompt.failed.txt` เพื่อช่วยตรวจสอบปัญหา
+
+ระบบตรวจ Image References จาก requirement ของแต่ละ shot: ตัวละครที่มองเห็นทุกตัวต้องมี character sheet, `locationKey` ทุกค่าและ `objectKey` ทุกค่าต้องมี asset รองรับ และ `usedInShots` ต้องครอบคลุมเฉพาะ shot ที่ใช้งานจริง ใน final prompt ระบบตรวจต่อว่า `<Picture N>` หรือ `@ImageN` map กลับไปยัง asset เดิมและปรากฏในทุก shot/beat ที่ระบุไว้ จึงไม่ปล่อยให้ Picture ID ถูกสลับหน้าที่หรือมี prompt ภาพอ้างอิงไม่ครบโดยไม่แจ้ง error
 
 ## ดูสถานะ
 

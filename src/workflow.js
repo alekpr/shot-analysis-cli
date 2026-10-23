@@ -400,7 +400,7 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
   let referencePrompts = await trackFailure(outputFolder, state, () => generateJson(
     llm,
     referencePromptsPrompt(story, shots, existingReferences),
-    (value) => validateReferencePrompts(value, existingReferenceLabels),
+    (value) => validateReferencePrompts(value, existingReferenceLabels, story, shots),
     "reference image prompts"
   ));
   const referencePromptsFile = path.join(outputFolder, "04-reference-image-prompts.md");
@@ -411,7 +411,7 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
     referencePrompts = await trackFailure(outputFolder, state, () => generateJson(
       llm,
       referencePromptsPrompt(story, shots, existingReferences, notes),
-      (value) => validateReferencePrompts(value, existingReferenceLabels),
+      (value) => validateReferencePrompts(value, existingReferenceLabels, story, shots),
       "reference image prompts"
     ));
     await saveText(referencePromptsFile, renderReferencePrompts(referencePrompts));
@@ -448,7 +448,7 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
     referencePrompts = await trackFailure(outputFolder, state, () => generateJson(
       llm,
       referencePromptsPrompt(story, shots, existingReferences, `ปรับ Image References จากการ review Storyboard: ${notes}`),
-      (value) => validateReferencePrompts(value, existingReferenceLabels),
+      (value) => validateReferencePrompts(value, existingReferenceLabels, story, shots),
       "reference image prompts"
     ));
     await saveText(referencePromptsFile, renderReferencePrompts(referencePrompts));
@@ -459,7 +459,7 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
       referencePrompts = await trackFailure(outputFolder, state, () => generateJson(
         llm,
         referencePromptsPrompt(story, shots, existingReferences, `${notes}\nแก้เพิ่มเติม: ${revisionNotes}`),
-        (value) => validateReferencePrompts(value, existingReferenceLabels),
+        (value) => validateReferencePrompts(value, existingReferenceLabels, story, shots),
         "reference image prompts"
       ));
       await saveText(referencePromptsFile, renderReferencePrompts(referencePrompts));
@@ -616,7 +616,7 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
         referencePrompts = await generateJson(
           llm,
           referencePromptsPrompt(state.story, state.shots, existingReferences),
-          (value) => validateReferencePrompts(value, existingReferenceLabels),
+          (value) => validateReferencePrompts(value, existingReferenceLabels, state.story, state.shots),
           "reference image prompts"
         );
         state.referencePrompts = referencePrompts;
@@ -627,7 +627,7 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
         referencePrompts = await generateJson(
           llm,
           referencePromptsPrompt(state.story, state.shots, existingReferences, notes),
-          (value) => validateReferencePrompts(value, existingReferenceLabels),
+          (value) => validateReferencePrompts(value, existingReferenceLabels, state.story, state.shots),
           "reference image prompts"
         );
         state.referencePrompts = referencePrompts;
@@ -671,7 +671,7 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
         let referencePrompts = await generateJson(
           llm,
           referencePromptsPrompt(state.story, state.shots, existingReferences, `ปรับ Image References จากการ review Storyboard: ${notes}`),
-          (value) => validateReferencePrompts(value, existingReferenceLabels),
+          (value) => validateReferencePrompts(value, existingReferenceLabels, state.story, state.shots),
           "reference image prompts"
         );
         const referencePromptsFile = path.join(outputFolder, "04-reference-image-prompts.md");
@@ -683,7 +683,7 @@ export async function runResumeWorkflow({ terminal, llm, folder = ".", settings 
           referencePrompts = await generateJson(
             llm,
             referencePromptsPrompt(state.story, state.shots, existingReferences, `${notes}\nแก้เพิ่มเติม: ${revisionNotes}`),
-            (value) => validateReferencePrompts(value, existingReferenceLabels),
+            (value) => validateReferencePrompts(value, existingReferenceLabels, state.story, state.shots),
             "reference image prompts"
           );
           state.referencePrompts = referencePrompts;

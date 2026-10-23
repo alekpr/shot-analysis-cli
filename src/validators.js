@@ -169,6 +169,10 @@ export function validateShots(value, expectedDuration, expectedShotCount) {
     if (index === 0 && shot.storyPhase !== "hook") errors.push("Shot 1 ต้องมี storyPhase เป็น hook");
     if (!Array.isArray(shot.subjects)) errors.push(`${shotLabel} ต้องมี subjects เป็น array`);
     if (!Array.isArray(shot.offscreenSubjects)) errors.push(`${shotLabel} ต้องมี offscreenSubjects เป็น array`);
+    if (!String(shot.referenceNeeds?.locationKey || "").trim()) errors.push(`${shotLabel} ไม่มี referenceNeeds.locationKey`);
+    if (!Array.isArray(shot.referenceNeeds?.objectKeys)) errors.push(`${shotLabel} ต้องมี referenceNeeds.objectKeys เป็น array`);
+    const objectKeys = (shot.referenceNeeds?.objectKeys || []).map(normalizeComparison).filter(Boolean);
+    if (new Set(objectKeys).size !== objectKeys.length) errors.push(`${shotLabel} มี referenceNeeds.objectKeys ซ้ำกัน`);
     const visibleSubjects = new Set(shot.subjects || []);
     for (const subject of shot.offscreenSubjects || []) {
       if (visibleSubjects.has(subject)) errors.push(`${shotLabel} ระบุ ${subject} ซ้ำทั้ง subjects และ offscreenSubjects`);
@@ -226,11 +230,12 @@ export function validateShots(value, expectedDuration, expectedShotCount) {
   return errors;
 }
 
-export function validateReferencePrompts(value, existingReferenceLabels = []) {
+export function validateReferencePrompts(value, existingReferenceLabels = [], story, shotList) {
   const errors = [];
   if (!value || typeof value !== "object") return ["reference prompts ต้องเป็น object"];
   if (!value.globalStyle?.visualDirection) errors.push("reference prompts ไม่มี globalStyle.visualDirection");
-  if (!Array.isArray(value.assets) || value.assets.length === 0) return [...errors, "reference prompts ไม่มี assets"];
+  if (!Array.isArray(value.assets)) return [...errors, "reference prompts ไม่มี assets"];
+  if (value.assets.length === 0 && !(value.existingReferences || []).length) return [...errors, "reference prompts ไม่มี assets"];
 
   const normalizePictureId = (item) => String(item || "").trim().replace(/^<|>$/g, "").toLowerCase();
   const existing = new Set(existingReferenceLabels.map(normalizePictureId));
@@ -259,8 +264,14 @@ export function validateReferencePrompts(value, existingReferenceLabels = []) {
     if (!["character", "location", "object"].includes(asset.assetType)) errors.push(`${label || `asset ${index + 1}`} มี assetType ไม่ถูกต้อง`);
     if (!asset.prompt || !asset.negativePrompt) errors.push(`${label || `asset ${index + 1}`} ต้องมี prompt และ negativePrompt`);
     if (!Array.isArray(asset.usedInShots)) errors.push(`${label || `asset ${index + 1}`} ต้องมี usedInShots`);
-    if (asset.assetType === "character") hasCharacter = true;
-    if (asset.assetType === "location") hasLocation = true;
+    if (asset.assetType === "character") {
+      hasCharacter = true;
+      if (!Array.isArray(asset.linkedSubjects) || asset.linkedSubjects.length !== 1) errors.push(`${label} character ต้อง linkedSubjects เพียง 1 Subject`);
+    }
+    if (asset.assetType === "location") {
+      hasLocation = true;
+      if (!normalizeComparison(asset.locationKey)) errors.push(`${label} location ต้องมี locationKey`);
+    }
     if (asset.assetType === "object") {
       const objectKey = normalizeComparison(asset.objectKey);
       if (!objectKey) errors.push(`${label || `asset ${index + 1}`} ต้องมี objectKey สำหรับวัตถุหลักเพียงชนิดเดียว`);
@@ -268,9 +279,82 @@ export function validateReferencePrompts(value, existingReferenceLabels = []) {
       if (objectKey) objectKeys.add(objectKey);
     }
   });
+  const references = [...(value.existingReferences || []), ...value.assets];
+  hasCharacter ||= references.some((item) => item.assetType === "character");
+  hasLocation ||= references.some((item) => item.assetType === "location");
   if (!hasCharacter) errors.push("reference prompts ต้องมี character sheet อย่างน้อย 1 รายการ");
   if (!hasLocation) errors.push("reference prompts ต้องมี location อย่างน้อย 1 รายการ");
+  const shots = shotList?.shots || [];
+  const validShotNumbers = new Set(shots.map((shot) => Number(shot.number)));
+  if (Array.isArray(shotList?.shots)) {
+    for (const reference of references) {
+      const pictureId = reference.pictureId || "reference";
+      for (const shotNumber of reference.usedInShots || []) {
+        if (!validShotNumbers.has(Number(shotNumber))) errors.push(`${pictureId} ใช้ shot ${shotNumber} ที่ไม่มีใน shot list`);
+      }
+    }
+  }
+
+  const expectedSubjects = new Map();
+  const expectedLocations = new Map();
+  const expectedObjects = new Map();
+  for (const shot of shots) {
+    const shotNumber = Number(shot.number);
+    for (const subject of shot.subjects || []) {
+      if (!expectedSubjects.has(subject)) expectedSubjects.set(subject, new Set());
+      expectedSubjects.get(subject).add(shotNumber);
+    }
+    const locationKey = normalizeComparison(shot.referenceNeeds?.locationKey);
+    if (locationKey) {
+      if (!expectedLocations.has(locationKey)) expectedLocations.set(locationKey, new Set());
+      expectedLocations.get(locationKey).add(shotNumber);
+    }
+    for (const rawObjectKey of shot.referenceNeeds?.objectKeys || []) {
+      const objectKey = normalizeComparison(rawObjectKey);
+      if (!objectKey) continue;
+      if (!expectedObjects.has(objectKey)) expectedObjects.set(objectKey, new Set());
+      expectedObjects.get(objectKey).add(shotNumber);
+    }
+  }
+
+  const checkCoverage = (kind, requirements, matches) => {
+    for (const [key, requiredShots] of requirements) {
+      const candidates = references.filter((reference) => matches(reference, key));
+      if (candidates.length === 0) {
+        errors.push(`reference prompts ไม่มี ${kind} สำหรับ ${key}`);
+        continue;
+      }
+      const covered = new Set(candidates.flatMap((reference) => reference.usedInShots || []).map(Number));
+      const missingShots = [...requiredShots].filter((shotNumber) => !covered.has(shotNumber));
+      if (missingShots.length) errors.push(`${kind} ${key} ไม่มี usedInShots ${missingShots.join(", ")}`);
+      const unrelatedShots = [...covered].filter((shotNumber) => !requiredShots.has(shotNumber));
+      if (unrelatedShots.length) errors.push(`${kind} ${key} ใส่ usedInShots ที่ไม่เกี่ยวข้อง: ${unrelatedShots.join(", ")}`);
+    }
+  };
+  checkCoverage("character", expectedSubjects, (reference, subject) => reference.assetType === "character" && (reference.linkedSubjects || []).includes(subject));
+  checkCoverage("location", expectedLocations, (reference, key) => reference.assetType === "location" && normalizeComparison(reference.locationKey) === key);
+  checkCoverage("object", expectedObjects, (reference, key) => reference.assetType === "object" && normalizeComparison(reference.objectKey) === key);
+
+  const storySubjects = new Set((story?.characters || []).map((character) => character.id).filter(Boolean));
+  for (const reference of references.filter((item) => item.assetType === "character")) {
+    for (const subject of reference.linkedSubjects || []) {
+      if (storySubjects.size && !storySubjects.has(subject)) errors.push(`${reference.pictureId} linkedSubjects มี ${subject} ที่ไม่มีใน STORY`);
+    }
+  }
   return errors;
+}
+
+function allReferenceAssets(referenceAssets) {
+  return [
+    ...(referenceAssets?.existingReferences || []),
+    ...(referenceAssets?.assets || [])
+  ].filter((item) => item?.pictureId);
+}
+
+function requiredReferenceAssetsForShot(referenceAssets, shotNumber) {
+  return allReferenceAssets(referenceAssets).filter((item) =>
+    (item.usedInShots || []).map(Number).includes(Number(shotNumber))
+  );
 }
 
 export function validateStoryboardPrompt(value, shotList, referenceAssets, expectedAspectRatio) {
@@ -311,6 +395,11 @@ export function validateStoryboardPrompt(value, shotList, referenceAssets, expec
     }
     for (const pictureId of panel.referencePictures || []) {
       if (!allowedPictures.has(pictureId)) errors.push(`${label} ใช้ Picture ID ที่ไม่มีใน reference assets: ${pictureId}`);
+    }
+    for (const reference of requiredReferenceAssetsForShot(referenceAssets, panel.shotNumber)) {
+      if (!(panel.referencePictures || []).includes(reference.pictureId)) {
+        errors.push(`${label} ไม่มี ${reference.pictureId} ที่กำหนด usedInShots ไว้`);
+      }
     }
   });
   if (String(value.masterPrompt || "").trim().length < 500) errors.push("storyboard masterPrompt สั้นเกินไป");
@@ -381,6 +470,11 @@ export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0
       for (const subject of shot.subjects || []) {
         if (!block.includes(`<${subject}>`)) errors.push(`[Shot ${shot.number}] ไม่กล่าวถึง <${subject}>`);
       }
+      for (const reference of requiredReferenceAssetsForShot(referenceAssets, shot.number)) {
+        if (!block.includes(`<${reference.pictureId}>`)) {
+          errors.push(`[Shot ${shot.number}] ไม่มี <${reference.pictureId}> ที่กำหนด usedInShots ไว้`);
+        }
+      }
       const allowedCharacters = new Set([...(shot.subjects || []), ...(shot.offscreenSubjects || [])]);
       const mentionedCharacters = [...block.matchAll(/<((?:Subject)\s+\d+)>/gi)].map((match) => match[1]);
       for (const subject of new Set(mentionedCharacters)) {
@@ -406,12 +500,35 @@ export function validateFinalPrompt(value, prefix = "DY,", expectedShotCount = 0
   if (visualDirection?.mood && !value.toLocaleLowerCase().includes(visualDirection.mood.toLocaleLowerCase())) {
     errors.push(`prompt ไม่มี Mood: ${visualDirection.mood}`);
   }
-  const pictureIds = [
-    ...(referenceAssets?.existingReferences || []).map((item) => item.pictureId),
-    ...(referenceAssets?.assets || []).map((item) => item.pictureId)
-  ].filter(Boolean);
-  for (const pictureId of pictureIds) {
-    if (!value.includes(`<${pictureId}>`)) errors.push(`prompt ไม่มี <${pictureId}> จาก reference assets`);
+  const subjectDefinitions = value.slice(0, value.indexOf("summary:") >= 0 ? value.indexOf("summary:") : undefined);
+  const referenceItems = allReferenceAssets(referenceAssets);
+  const allowedPictureTokens = new Set(referenceItems.map((item) => `<${item.pictureId}>`));
+  for (const token of value.match(/<Picture\s+\d+>/gi) || []) {
+    const canonical = [...allowedPictureTokens].find((allowed) => allowed.toLocaleLowerCase() === token.toLocaleLowerCase());
+    if (!canonical && referenceItems.length) errors.push(`prompt ใช้ ${token} ที่ไม่มีใน reference assets`);
+  }
+  for (const reference of referenceItems) {
+    const pictureToken = `<${reference.pictureId}>`;
+    if (!value.includes(pictureToken)) errors.push(`prompt ไม่มี ${pictureToken} จาก reference assets`);
+    const mappingLine = subjectDefinitions.split(/\r?\n/).find((line) => line.includes(pictureToken)) || "";
+    if (!mappingLine) {
+      errors.push(`subject_definitions ไม่มี mapping ของ ${pictureToken}`);
+      continue;
+    }
+    const picturesOnLine = mappingLine.match(/<Picture\s+\d+>/gi) || [];
+    if (picturesOnLine.length !== 1) errors.push(`mapping ${pictureToken} ต้องอยู่คนละบรรทัดและมี Picture เดียว`);
+    if (reference.assetType && !mappingLine.toLocaleLowerCase().includes(reference.assetType.toLocaleLowerCase())) {
+      errors.push(`mapping ${pictureToken} ไม่ระบุ assetType ${reference.assetType}`);
+    }
+    const identity = reference.name || reference.description;
+    if (identity && !mappingLine.toLocaleLowerCase().includes(String(identity).toLocaleLowerCase())) {
+      errors.push(`mapping ${pictureToken} ไม่ตรงกับชื่อ asset: ${identity}`);
+    }
+    if (reference.assetType === "character") {
+      for (const subject of reference.linkedSubjects || []) {
+        if (!mappingLine.includes(`<${subject}>`)) errors.push(`mapping ${pictureToken} ไม่เชื่อมกับ <${subject}>`);
+      }
+    }
   }
   if (/\[cite\s*:/i.test(value)) errors.push("prompt มี citation marker ที่ไม่ควรส่งให้ video generator");
   return errors;
@@ -447,14 +564,35 @@ export function validateSeedancePrompt(value, expectedShotCount = 0, visualDirec
   if (visualDirection?.mood && !value.toLocaleLowerCase().includes(visualDirection.mood.toLocaleLowerCase())) {
     errors.push(`prompt ไม่มี Mood: ${visualDirection.mood}`);
   }
-  const pictureIds = [
-    ...(referenceAssets?.existingReferences || []).map((item) => item.pictureId),
-    ...(referenceAssets?.assets || []).map((item) => item.pictureId)
-  ].filter(Boolean);
-  for (const pictureId of pictureIds) {
+  const referenceMapping = value.slice(
+    value.indexOf("REFERENCE_MAPPING:"),
+    value.indexOf("SEQUENCE_SPECIFICATION:") >= 0 ? value.indexOf("SEQUENCE_SPECIFICATION:") : undefined
+  );
+  const referenceItems = allReferenceAssets(referenceAssets);
+  const allowedImageTokens = new Set(referenceItems.map((item) => {
+    const number = String(item.pictureId).match(/Picture\s+(\d+)/i)?.[1];
+    return number ? `@Image${number}` : null;
+  }).filter(Boolean));
+  for (const token of value.match(/@Image\d+/gi) || []) {
+    const canonical = [...allowedImageTokens].find((allowed) => allowed.toLocaleLowerCase() === token.toLocaleLowerCase());
+    if (!canonical && referenceItems.length) errors.push(`prompt ใช้ ${token} ที่ไม่มีใน reference assets`);
+  }
+  for (const reference of referenceItems) {
+    const pictureId = reference.pictureId;
     const number = String(pictureId).match(/Picture\s+(\d+)/i)?.[1];
-    if (!number || !value.includes(`@Image${number}`) || !value.includes(`<${pictureId}>`)) {
+    const mappingLine = referenceMapping.split(/\r?\n/).find((line) => line.includes(`@Image${number}`) && line.includes(`<${pictureId}>`)) || "";
+    if (!number || !mappingLine) {
       errors.push(`prompt ไม่มี mapping @Image${number || "?"} = <${pictureId}>`);
+      continue;
+    }
+    const imagesOnLine = mappingLine.match(/@Image\d+/gi) || [];
+    if (imagesOnLine.length !== 1) errors.push(`mapping @Image${number} ต้องอยู่คนละบรรทัดและมี Image เดียว`);
+    if (reference.assetType && !mappingLine.toLocaleLowerCase().includes(reference.assetType.toLocaleLowerCase())) {
+      errors.push(`mapping @Image${number} ไม่ระบุ assetType ${reference.assetType}`);
+    }
+    const identity = reference.name || reference.description;
+    if (identity && !mappingLine.toLocaleLowerCase().includes(String(identity).toLocaleLowerCase())) {
+      errors.push(`mapping @Image${number} ไม่ตรงกับชื่อ asset: ${identity}`);
     }
   }
   for (let number = 1; number <= expectedShotCount; number += 1) {
@@ -469,6 +607,12 @@ export function validateSeedancePrompt(value, expectedShotCount = 0, visualDirec
       if (block.length < 300) errors.push(`[Beat ${shot.number}] มีรายละเอียดสั้นเกินไปสำหรับ production prompt`);
       for (const subject of shot.subjects || []) {
         if (!block.includes(`<${subject}>`)) errors.push(`[Beat ${shot.number}] ไม่กล่าวถึง <${subject}>`);
+      }
+      for (const reference of requiredReferenceAssetsForShot(referenceAssets, shot.number)) {
+        const number = String(reference.pictureId).match(/Picture\s+(\d+)/i)?.[1];
+        if (!number || !block.includes(`@Image${number}`)) {
+          errors.push(`[Beat ${shot.number}] ไม่มี @Image${number || "?"} สำหรับ ${reference.pictureId} ที่กำหนด usedInShots ไว้`);
+        }
       }
       for (const dialogue of shot.dialogue || []) {
         const language = dialogue.language || "English";

@@ -31,6 +31,7 @@
 | --- | --- | --- |
 | เวลาและเรื่อง | `number`, `startTime`, `endTime`, `duration`, `beat`, `storyPhase`, `objective` | ล็อกจังหวะและหน้าที่เชิงเรื่อง |
 | พื้นที่ | `subjects`, `offscreenSubjects`, `setting`, `spatialAnchor` | แยกผู้ที่เห็นในเฟรม ผู้ที่อยู่นอกเฟรม และทำให้ geography อ่านได้ |
+| ภาพอ้างอิง | `referenceNeeds.locationKey`, `referenceNeeds.objectKeys` | สร้าง manifest ว่า location และ object ใดต้องมี Picture reference และใช้ key เดิมข้าม shot |
 | การกระทำ | `startState`, `action`, `actionBeats`, `endState`, `causalLink` | บังคับลำดับเวลา เหตุ→ผล และ state ที่มองเห็น |
 | ภาพ | `camera`, `composition`, `lighting` | ทำให้คำสั่งกล้องถ่ายหรือ generate ได้จริง |
 | เสียง | `dialogue`, `sound` | sync คำพูด เสียงสัมผัส ambience และดนตรี |
@@ -49,6 +50,8 @@
 - `actionBeats` เรียงลำดับ มีทั้ง action กับผลที่เกิดขึ้น และมีช่วงเวลาที่ไม่ซ้อนกันภายใน duration
 - Subject ที่ปรากฏใน generation prompt ต้องถูกประกาศเป็น `subjects` หรือ `offscreenSubjects` ของ shot นั้น
 - Object reference ทุกภาพมี `objectKey` ที่ไม่ซ้ำกัน
+- Subject ที่มองเห็นทุกตัว, locationKey และ objectKey ทุกค่าต้องมี Picture asset รองรับ พร้อม `usedInShots` ที่ครบและไม่เกินจริง
+- Storyboard และ final generation prompt ต้องใช้ Picture ID ตาม `usedInShots` ของแต่ละ shot และ mapping ต้องคงประเภท ชื่อ Subject/location/object key เดิม
 - Shot list มี global continuity checklist
 
 Validator ตรวจความครบของโครงสร้าง ส่วนผู้ใช้ยังเป็นผู้ตัดสินคุณภาพทางความคิดและความเหมาะสมของแต่ละ shot ในขั้น review

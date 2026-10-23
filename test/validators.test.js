@@ -17,6 +17,7 @@ function validShot(number, startTime, endTime) {
     subjects: ["Subject 1"],
     offscreenSubjects: [],
     setting: "Room",
+    referenceNeeds: { locationKey: "room", objectKeys: [] },
     spatialAnchor: "Subject 1 faces the door on frame right.",
     startState: number === 1 ? "Subject 1 stands beside the table." : `Subject 1 reaches mark ${number - 1}.`,
     continuityBridge: number === 1 ? "Initial state" : `The cut continues after reaching mark ${number - 1}.`,
@@ -250,8 +251,8 @@ test("validates character and location reference prompts with unique picture IDs
     globalStyle: { visualDirection: "Anime" },
     existingReferences: [{ pictureId: "Picture 1", description: "logo" }],
     assets: [
-      { pictureId: "Picture 2", assetType: "character", prompt: "Character sheet", negativePrompt: "text", usedInShots: [1] },
-      { pictureId: "Picture 3", assetType: "location", prompt: "Empty location", negativePrompt: "people", usedInShots: [1] }
+      { pictureId: "Picture 2", assetType: "character", linkedSubjects: ["Subject 1"], prompt: "Character sheet", negativePrompt: "text", usedInShots: [1] },
+      { pictureId: "Picture 3", assetType: "location", locationKey: "room", prompt: "Empty location", negativePrompt: "people", usedInShots: [1] }
     ]
   };
   assert.deepEqual(validateReferencePrompts(value, ["Picture 1"]), []);
@@ -267,4 +268,36 @@ test("rejects reference assets that reuse an existing Picture ID", () => {
     ]
   };
   assert.match(validateReferencePrompts(value, ["Picture 1"]).join("; "), /ซ้ำกับ reference/);
+});
+
+test("rejects incomplete reference coverage for subjects, locations, and objects", () => {
+  const shot1 = validShot(1, 0, 5);
+  const shot2 = validShot(2, 5, 10);
+  shot2.subjects = ["Subject 2"];
+  shot2.referenceNeeds = { locationKey: "hallway", objectKeys: ["sealed-letter"] };
+  const references = {
+    globalStyle: { visualDirection: "Live action" },
+    existingReferences: [],
+    assets: [
+      { pictureId: "Picture 1", assetType: "character", name: "Hero", linkedSubjects: ["Subject 1"], usedInShots: [1], prompt: "Hero sheet", negativePrompt: "text" },
+      { pictureId: "Picture 2", assetType: "location", name: "Room", locationKey: "room", linkedSubjects: [], usedInShots: [1], prompt: "Room", negativePrompt: "people" }
+    ]
+  };
+  const story = { characters: [{ id: "Subject 1" }, { id: "Subject 2" }] };
+  const errors = validateReferencePrompts(references, [], story, { shots: [shot1, shot2] }).join("; ");
+  assert.match(errors, /ไม่มี character สำหรับ Subject 2/);
+  assert.match(errors, /ไม่มี location สำหรับ hallway/);
+  assert.match(errors, /ไม่มี object สำหรับ sealed letter/);
+});
+
+test("final prompt requires each Picture mapping and its per-shot reference", () => {
+  const filler = " The camera, action, light, performance, sound, continuity, and final frame remain fully specified for production.".repeat(4);
+  const prompt = `DY,subject_definitions:\n<Picture 1> maps to location asset Wrong Room.\n<Subject 1> is the hero.\nsummary:\nB\nretention_analysis:\nC\ndetailed_description:\n[Shot 1] <Subject 1> performs the action.${filler}\noverall_soundscape:\nE\nnon_diegetic_music:\nF`;
+  const references = { assets: [{ pictureId: "Picture 1", assetType: "character", name: "Hero Sheet", linkedSubjects: ["Subject 1"], usedInShots: [1] }] };
+  const shots = { shots: [{ number: 1, startTime: 0, subjects: ["Subject 1"], offscreenSubjects: [], dialogue: [] }] };
+  const errors = validateFinalPrompt(prompt, "DY,", 1, undefined, references, shots, { characters: [{ id: "Subject 1" }] }).join("; ");
+  assert.match(errors, /ไม่มี <Picture 1> ที่กำหนด usedInShots/);
+  assert.match(errors, /ไม่ระบุ assetType character/);
+  assert.match(errors, /ไม่ตรงกับชื่อ asset: Hero Sheet/);
+  assert.match(errors, /ไม่เชื่อมกับ <Subject 1>/);
 });

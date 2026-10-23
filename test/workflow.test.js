@@ -20,6 +20,7 @@ function fakeShot({ number, startTime, endTime, objective, action, composition, 
     subjects: ["Subject 1"],
     offscreenSubjects: [],
     setting: "restaurant",
+    referenceNeeds: { locationKey: "restaurant-main-room", objectKeys: number <= 2 ? ["restaurant-table"] : [] },
     spatialAnchor: "Subject 1 remains beside the same table; the exit is frame right.",
     startState: number === 1 ? "Initial state" : `State leaving shot ${number - 1}`,
     continuityBridge: number === 1 ? "Initial state" : `The new framing continues from shot ${number - 1}.`,
@@ -109,8 +110,8 @@ class FakeLlm {
         globalStyle: { visualDirection: "Live-action cinematic", mood: "melancholic", styleLock: "warm restaurant lighting" },
         existingReferences: [],
         assets: [
-          { pictureId: "Picture 1", assetType: "character", name: "A character sheet", linkedSubjects: ["Subject 1"], usedInShots: [1, 2, 3], purpose: "character consistency", prompt: "Character sheet of A with front, side, and back views.", negativePrompt: "other characters, text", consistencyNotes: ["same coat"] },
-          { pictureId: "Picture 2", assetType: "location", name: "Restaurant", linkedSubjects: [], usedInShots: [1, 2, 3], purpose: "location consistency", prompt: "Empty warm restaurant environment reference.", negativePrompt: "people, text", consistencyNotes: ["same table layout"] },
+          { pictureId: "Picture 1", assetType: "character", locationKey: null, objectKey: null, name: "A character sheet", linkedSubjects: ["Subject 1"], usedInShots: [1, 2, 3], purpose: "character consistency", prompt: "Character sheet of A with front, side, and back views.", negativePrompt: "other characters, text", consistencyNotes: ["same coat"] },
+          { pictureId: "Picture 2", assetType: "location", locationKey: "restaurant-main-room", objectKey: null, name: "Restaurant", linkedSubjects: [], usedInShots: [1, 2, 3], purpose: "location consistency", prompt: "Empty warm restaurant environment reference.", negativePrompt: "people, text", consistencyNotes: ["same table layout"] },
           { pictureId: "Picture 3", assetType: "object", objectKey: "restaurant-table", name: "Table", linkedSubjects: [], usedInShots: [1, 2], purpose: "prop continuity", prompt: "Isolated restaurant table from multiple angles.", negativePrompt: "people, food", consistencyNotes: ["dark wood"] }
         ],
         usageGuide: ["Generate each image and attach it with its assigned Picture ID."]
@@ -140,7 +141,7 @@ class FakeLlm {
       });
     }
     const detail = " The 50mm medium camera holds at eye level across the same table while warm practical light shapes her face. Her controlled breathing, gaze, and precise hand movement show the emotional change; cloth movement and restaurant room tone remain synchronized. The camera completes its slow motivated push, preserves screen direction and wardrobe continuity, and ends on a clearly defined final position before a hard cut.";
-    return `DY,subject_definitions:\n<Subject 1> is a woman in a Live-action cinematic style with a melancholic tone, matching <Picture 1>. The restaurant matches <Picture 2> and table matches <Picture 3>.\nsummary:\nVisual direction: Live-action cinematic; Mood: melancholic\nretention_analysis:\nUse <Picture 1>, <Picture 2>, and <Picture 3>.\ndetailed_description:\n[Shot 1] <Subject 1> looks away.${detail}\n[Shot 2] At 00:05.000 <Subject 1> withdraws her hand.${detail}\n[Shot 3] At 00:10.000 <Subject 1> leaves.${detail}\noverall_soundscape:\nQuiet restaurant ambience.\nnon_diegetic_music:\nNone.`;
+    return `DY,subject_definitions:\n<Picture 1> maps to character asset A character sheet for <Subject 1>, preserving character consistency.\n<Picture 2> maps to location asset Restaurant with locationKey restaurant-main-room, preserving location consistency.\n<Picture 3> maps to object asset Table with objectKey restaurant-table, preserving prop continuity.\n<Subject 1> is a woman in a Live-action cinematic style with a melancholic tone, matching <Picture 1>.\nsummary:\nVisual direction: Live-action cinematic; Mood: melancholic\nretention_analysis:\nUse <Picture 1>, <Picture 2>, and <Picture 3>.\ndetailed_description:\n[Shot 1] <Subject 1> looks away using <Picture 1>, <Picture 2>, and <Picture 3>.${detail}\n[Shot 2] At 00:05.000 <Subject 1> withdraws her hand using <Picture 1>, <Picture 2>, and <Picture 3>.${detail}\n[Shot 3] At 00:10.000 <Subject 1> leaves using <Picture 1> and <Picture 2>.${detail}\noverall_soundscape:\nQuiet restaurant ambience.\nnon_diegetic_music:\nNone.`;
   }
 }
 
@@ -200,7 +201,7 @@ class SeedanceLlm extends FakeLlm {
   async generate(options) {
     if (!options.prompt.includes("production prompt ภาษาอังกฤษก้อนเดียวสำหรับ Seedance 2.5")) return super.generate(options);
     const detail = " The 50mm medium camera remains at eye level across the same table while warm practical light shapes <Subject 1>'s face. Her controlled breathing, gaze, and precise hand movement communicate the emotional change; cloth movement and restaurant room tone stay synchronized. The camera completes one motivated slow push, preserves screen direction, wardrobe, geography, and prop continuity, and ends on a clearly readable final position before the motivated hard cut.";
-    return `REFERENCE_MAPPING:\n@Image1 = <Picture 1> character identity and wardrobe reference\n@Image2 = <Picture 2> restaurant geography and lighting reference\n@Image3 = <Picture 3> table material and prop-state reference\nSEQUENCE_SPECIFICATION:\nGenerator target: Seedance 2.5\nVisual direction: Live-action cinematic\nMood: melancholic\nDuration: 15 seconds; aspect ratio 9:16.\nTIMECODED_BEATS:\n[Beat 1] 00:00.000-00:05.000 <Subject 1> looks away.${detail}\n[Beat 2] 00:05.000-00:10.000 <Subject 1> withdraws her hand.${detail}\n[Beat 3] 00:10.000-00:15.000 <Subject 1> leaves.${detail}\nGLOBAL_CONSTRAINTS:\nPreserve character identity, anatomy, wardrobe, prop ownership, location geography, screen direction, lighting, physics, dialogue, synchronized audio, and every approved continuity state. No subtitles, logos, watermarks, UI, additional characters, events, or props.`;
+    return `REFERENCE_MAPPING:\n@Image1 = <Picture 1> character asset A character sheet for Subject 1 identity and wardrobe\n@Image2 = <Picture 2> location asset Restaurant geography and lighting\n@Image3 = <Picture 3> object asset Table material and prop-state\nSEQUENCE_SPECIFICATION:\nGenerator target: Seedance 2.5\nVisual direction: Live-action cinematic\nMood: melancholic\nDuration: 15 seconds; aspect ratio 9:16.\nTIMECODED_BEATS:\n[Beat 1] 00:00.000-00:05.000 <Subject 1> uses @Image1, @Image2, and @Image3 while she looks away.${detail}\n[Beat 2] 00:05.000-00:10.000 <Subject 1> uses @Image1, @Image2, and @Image3 while she withdraws her hand.${detail}\n[Beat 3] 00:10.000-00:15.000 <Subject 1> uses @Image1 and @Image2 while she leaves.${detail}\nGLOBAL_CONSTRAINTS:\nPreserve character identity, anatomy, wardrobe, prop ownership, location geography, screen direction, lighting, physics, dialogue, synchronized audio, and every approved continuity state. No subtitles, logos, watermarks, UI, additional characters, events, or props.`;
   }
 }
 

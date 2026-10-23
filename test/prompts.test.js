@@ -64,5 +64,6 @@ test("shot and system prompts prevent motion resets and repeated actions", () =>
   assert.match(SHOT_LIST_FRAMEWORK, /ภาษาภาพยนตร์ที่ดึงสายตา/);
   assert.match(SHOT_LIST_FRAMEWORK, /ภาพที่ทรงพลังที่สุดไว้ให้ climax\/payoff/);
   assert.match(SHOT_LIST_FRAMEWORK, /ห้ามรวมวัตถุคนละชนิด/);
+  assert.match(shotsPrompt({}, ""), /referenceNeeds/);
   assert.match(SYSTEM_PROMPT, /ห้ามบรรยาย motion, action beat หรือบทพูดเดิมซ้ำ/);
 });
