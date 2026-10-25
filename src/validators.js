@@ -389,6 +389,26 @@ function requiredReferenceAssetsForShot(referenceAssets, shotNumber) {
   );
 }
 
+export function normalizeStoryboardPrompt(value, shotList) {
+  if (!value || typeof value !== "object") return value;
+  const shots = shotList?.shots || [];
+  if (!Array.isArray(value.panels)) return { ...value, shotCount: shots.length };
+  return {
+    ...value,
+    shotCount: shots.length,
+    panels: value.panels.map((panel, index) => {
+      const shot = shots[index];
+      if (!shot || !panel || typeof panel !== "object") return panel;
+      return {
+        ...panel,
+        shotNumber: Number(shot.number) || index + 1,
+        timeRange: `${secondsToTime(shot.startTime)}-${secondsToTime(shot.endTime)}`,
+        camera: normalizeCameraPlan(shot.camera, shot.cameraContinuity)
+      };
+    })
+  };
+}
+
 export function validateStoryboardPrompt(value, shotList, referenceAssets, expectedAspectRatio) {
   const errors = [];
   const shots = shotList?.shots || [];

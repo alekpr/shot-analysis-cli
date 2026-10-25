@@ -5,7 +5,7 @@ import { analysisPrompt, finalPrompt, generationSystemPrompt, referencePromptsPr
 import { renderAnalysis, renderReferencePrompts, renderShots, renderStoryboardPrompt, renderStory } from "./render.js";
 import { selectStoryCores } from "./cores.js";
 import { resolveVisualDirection } from "./visual-direction.js";
-import { normalizeGenerationPrompt, validateAnalysis, validateGenerationPrompt, validateReferencePrompts, validateShots, validateStoryboardPrompt, validateStory } from "./validators.js";
+import { normalizeGenerationPrompt, normalizeStoryboardPrompt, validateAnalysis, validateGenerationPrompt, validateReferencePrompts, validateShots, validateStoryboardPrompt, validateStory } from "./validators.js";
 import { loadBriefFile } from "./brief.js";
 import { parseShotCountPreference, selectShotCount } from "./shot-count.js";
 import { generationTargetLabel, selectGenerationTarget } from "./generation-target.js";
@@ -263,13 +263,13 @@ export function normalizeExistingReferences(analysis, references = "") {
   });
 }
 
-export async function generateJson(llm, prompt, validator, label, { maxAttempts = 4 } = {}) {
+export async function generateJson(llm, prompt, validator, label, { maxAttempts = 4, normalize = (value) => value } = {}) {
   let response = await llm.generate({ system: SYSTEM_PROMPT, prompt, json: true });
   let lastIssue = "ไม่ทราบสาเหตุ";
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     let value;
     try {
-      value = extractJson(response);
+      value = normalize(extractJson(response));
     } catch (error) {
       lastIssue = error.message;
       if (attempt === maxAttempts - 1) break;
@@ -499,7 +499,8 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
     llm,
     storyboardPrompt(story, shots, referencePrompts, aspectRatio),
     (value) => validateStoryboardPrompt(value, shots, referencePrompts, aspectRatio),
-    "storyboard key image prompt"
+    "storyboard key image prompt",
+    { normalize: (value) => normalizeStoryboardPrompt(value, shots) }
   ));
   const storyboardFile = path.join(outputFolder, "04-storyboard-keyimage-prompt.md");
   await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
@@ -510,7 +511,8 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
       llm,
       storyboardPrompt(story, shots, referencePrompts, aspectRatio, notes),
       (value) => validateStoryboardPrompt(value, shots, referencePrompts, aspectRatio),
-      "storyboard key image prompt"
+      "storyboard key image prompt",
+      { normalize: (value) => normalizeStoryboardPrompt(value, shots) }
     ));
     await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
     state.storyboardPrompt = storyboard;
@@ -723,7 +725,8 @@ async function runResumeWorkflowUnlocked({ terminal, llm, folder = ".", settings
           llm,
           storyboardPrompt(state.story, state.shots, state.referencePrompts, input.aspectRatio),
           (value) => validateStoryboardPrompt(value, state.shots, state.referencePrompts, input.aspectRatio),
-          "storyboard key image prompt"
+          "storyboard key image prompt",
+          { normalize: (value) => normalizeStoryboardPrompt(value, state.shots) }
         );
         state.storyboardPrompt = storyboard;
         await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
@@ -734,7 +737,8 @@ async function runResumeWorkflowUnlocked({ terminal, llm, folder = ".", settings
           llm,
           storyboardPrompt(state.story, state.shots, state.referencePrompts, input.aspectRatio, notes),
           (value) => validateStoryboardPrompt(value, state.shots, state.referencePrompts, input.aspectRatio),
-          "storyboard key image prompt"
+          "storyboard key image prompt",
+          { normalize: (value) => normalizeStoryboardPrompt(value, state.shots) }
         );
         state.storyboardPrompt = storyboard;
         await saveText(storyboardFile, renderStoryboardPrompt(storyboard));

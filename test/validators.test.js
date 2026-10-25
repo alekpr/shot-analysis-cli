@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeFinalPrompt, normalizeSeedancePrompt, validateFinalPrompt, validateReferencePrompts, validateSeedancePrompt, validateShots, validateStoryboardPrompt } from "../src/validators.js";
+import { normalizeFinalPrompt, normalizeSeedancePrompt, normalizeStoryboardPrompt, validateFinalPrompt, validateReferencePrompts, validateSeedancePrompt, validateShots, validateStoryboardPrompt } from "../src/validators.js";
 
 function validShot(number, startTime, endTime) {
   return {
@@ -269,6 +269,28 @@ test("validates storyboard panel count, timing, subjects, and references", () =>
   value.panels[1].camera = validCamera;
   value.panels[1].subjects = ["Subject 2"];
   assert.match(validateStoryboardPrompt(value, shots, references, "9:16").join("; "), /Subject 2/);
+});
+
+test("normalizes storyboard facts from the approved shot list", () => {
+  const shots = { shots: [validShot(1, 0, 5)] };
+  const value = {
+    shotCount: 99,
+    panels: [{
+      shotNumber: 8,
+      timeRange: "wrong",
+      keyframeMoment: "Keep this creative keyframe",
+      camera: { angle: "high-angle" }
+    }]
+  };
+  const normalized = normalizeStoryboardPrompt(value, shots);
+  assert.equal(normalized.shotCount, 1);
+  assert.equal(normalized.panels[0].shotNumber, 1);
+  assert.equal(normalized.panels[0].timeRange, "00:00.000-00:05.000");
+  assert.deepEqual(normalized.panels[0].camera, {
+    ...shots.shots[0].camera,
+    continuity: shots.shots[0].cameraContinuity
+  });
+  assert.equal(normalized.panels[0].keyframeMoment, "Keep this creative keyframe");
 });
 
 test("validates character and location reference prompts with unique picture IDs", () => {
