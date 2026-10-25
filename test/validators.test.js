@@ -25,8 +25,8 @@ function validShot(number, startTime, endTime) {
     action: `Subject 1 moves toward mark ${number}.`,
     actionBeats: [{ order: 1, startOffset: 0.5, endOffset: 2, action: `Takes step ${number}`, result: `Reaches mark ${number}` }],
     endState: `Subject 1 reaches mark ${number}.`,
-    camera: { lensMm: "35mm", shotSize: "MS", angle: "eye-level", perspective: "objective", height: "eye", position: "left of the table", primaryMovement: { type: "tracking", direction: "right, parallel to Subject 1", speed: "slow", motivation: "follow the step and preserve the door reveal" }, focus: { subject: "Subject 1", depth: "moderate", transition: "none" }, screenDirection: "Subject 1 moves frame-left to frame-right", intent: "Keep the movement readable while retaining the destination" },
-    cameraContinuity: { axis: "camera remains on the room side of the door axis", eyeline: "Subject 1 looks frame-right toward the door", entryDirection: "Subject 1 continues frame-left to frame-right", previousShotBridge: number === 1 ? "initial setup" : "continues on the same side of the axis" },
+    camera: { lensMm: "35mm", shotSize: "MS", angle: "eye-level", perspective: "objective", height: "eye", position: "left of the table", primaryMovement: { type: "tracking", direction: "right, parallel to Subject 1", speed: "slow", motivation: "follow the step and preserve the door reveal" }, focus: { subject: "Subject 1", depth: "moderate", transition: "none" }, screenDirection: "Subject 1 moves frame-left to frame-right", screenDirectionCode: "frame-right", screenDirectionSubject: "Subject 1", intent: "Keep the movement readable while retaining the destination" },
+    cameraContinuity: { axis: "door-to-table action axis", axisId: "room-door-axis", cameraSide: "left", axisTransition: number === 1 ? "initial" : "preserve", eyeline: "Subject 1 looks toward the door", eyelineMatchId: "subject-door-look", eyelineDirection: "frame-right", eyelineTransition: number === 1 ? "initial" : "preserve", entryDirection: "frame-right", exitDirection: "frame-right", changeMotivation: number === 1 ? "establish the initial room geography" : "preserve movement and room geography", previousShotBridge: number === 1 ? "initial setup" : "continues on the same side of the axis" },
     composition: "Door remains visible frame right.",
     lighting: "Soft window light.",
     dialogue: [],
@@ -244,7 +244,7 @@ test("validates storyboard panel count, timing, subjects, and references", () =>
     keyframeMoment: `Moment ${number}`,
     subjects: ["Subject 1"],
     referencePictures: ["Picture 1"],
-    camera: "50mm medium eye-level",
+    camera: { ...shots.shots[number - 1].camera, continuity: shots.shots[number - 1].cameraContinuity },
     composition: "clear foreground and background",
     prompt: "A complete cinematic still-image prompt.",
     continuityNotes: ["same wardrobe"],
@@ -260,6 +260,13 @@ test("validates storyboard panel count, timing, subjects, and references", () =>
     usageGuide: ["Generate as one image"]
   };
   assert.deepEqual(validateStoryboardPrompt(value, shots, references, "9:16"), []);
+  value.panels[1].camera.angle = "high-angle";
+  assert.match(validateStoryboardPrompt(value, shots, references, "9:16").join("; "), /camera ต้องคัดลอก structured camera plan/);
+  value.panels[1].camera.angle = shots.shots[1].camera.angle;
+  const validCamera = value.panels[1].camera;
+  value.panels[1].camera = null;
+  assert.match(validateStoryboardPrompt(value, shots, references, "9:16").join("; "), /camera ต้องเป็น structured object/);
+  value.panels[1].camera = validCamera;
   value.panels[1].subjects = ["Subject 2"];
   assert.match(validateStoryboardPrompt(value, shots, references, "9:16").join("; "), /Subject 2/);
 });

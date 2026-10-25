@@ -8,7 +8,7 @@ CLI สำหรับเปลี่ยน brief ของคลิปให้
 - วิเคราะห์ข้อมูลที่ขาดและถามผู้ใช้เพิ่มเติม
 - เลือกรูปแบบภาพ เช่น Cinematic, Anime, 3D, Illustration, Documentary และ Commercial
 - กำหนด mood และเลือก Core หลักของเรื่องผ่านรายการใน CLI
-- สร้างและตรวจโครงเรื่องกับ production shot list ที่ระบุ geography, action beats, เสียง และกล้องแบบแยก shot size, angle, perspective, movement, focus, axis/eyeline continuity ก่อนสร้าง prompt
+- สร้างและตรวจโครงเรื่องกับ production shot list ที่ระบุ geography, action beats, เสียง และกล้องแบบแยก shot size, angle, perspective, movement, focus พร้อมตรวจ axis, eyeline และ screen direction ข้าม shot ก่อนสร้าง prompt
 - สร้าง prompt สำหรับ Character sheets, Locations และ Objects พร้อม Picture ID
 - บันทึก checkpoint และทำงานต่อด้วย `resume` เมื่อหยุดหรือเกิดข้อผิดพลาด
 - ตั้ง provider, model และ API key ผ่าน `.env` หรือคำสั่ง `config`

@@ -1,5 +1,5 @@
 import { secondsToTime } from "./utils.js";
-import { validateCameraPlan } from "./camera.js";
+import { normalizeCameraPlan, validateCameraPlan } from "./camera.js";
 
 const REQUIRED_FINAL_SECTIONS = [
   "subject_definitions:",
@@ -222,7 +222,7 @@ export function validateShots(value, expectedDuration, expectedShotCount, story)
         }
       });
     }
-    errors.push(...validateCameraPlan(shot, shotLabel));
+    errors.push(...validateCameraPlan(shot, shotLabel, index > 0 ? shots[index - 1] : undefined));
     if (!shot.sound || !Array.isArray(shot.sound.syncEffects)) errors.push(`${shotLabel} ต้องมี sound และ syncEffects`);
     if (!shot.transition?.type || !shot.transition?.motivation) errors.push(`${shotLabel} ต้องมี transition type/motivation`);
     if (!Array.isArray(shot.continuityIn) || !Array.isArray(shot.continuityOut)) errors.push(`${shotLabel} ต้องมี continuityIn/continuityOut`);
@@ -418,10 +418,14 @@ export function validateStoryboardPrompt(value, shotList, referenceAssets, expec
       for (const subject of panel.subjects || []) {
         if (!visible.has(subject)) errors.push(`${label} ใช้ ${subject} ที่ไม่อยู่ใน subjects ของ Shot ${shot.number}`);
       }
+      const expectedCamera = normalizeCameraPlan(shot.camera, shot.cameraContinuity);
+      const panelCamera = normalizeCameraPlan(panel.camera, panel.camera?.continuity);
+      if (JSON.stringify(panelCamera) !== JSON.stringify(expectedCamera)) errors.push(`${label} camera ต้องคัดลอก structured camera plan จาก Shot ${shot.number} ให้ครบและตรงกัน`);
     }
-    for (const key of ["keyframeMoment", "camera", "composition", "prompt"]) {
+    for (const key of ["keyframeMoment", "composition", "prompt"]) {
       if (!String(panel[key] || "").trim()) errors.push(`${label} ไม่มี ${key}`);
     }
+    if (!panel.camera || typeof panel.camera !== "object") errors.push(`${label} camera ต้องเป็น structured object`);
     if (!Array.isArray(panel.subjects) || !Array.isArray(panel.referencePictures) || !Array.isArray(panel.continuityNotes) || !Array.isArray(panel.negativeConstraints)) {
       errors.push(`${label} ต้องมี subjects/referencePictures/continuityNotes/negativeConstraints เป็น array`);
     }

@@ -26,19 +26,22 @@ export function renderReferencePrompts(value) {
 }
 
 export function renderStoryboardPrompt(value) {
-  const panels = (value.panels || []).map((panel) => `### Shot ${panel.shotNumber} — ${panel.timeRange}
+  const panels = (value.panels || []).map((panel) => {
+    const camera = describeCameraPlan(panel.camera, panel.camera?.continuity);
+    return `### Shot ${panel.shotNumber} — ${panel.timeRange}
 
 - Keyframe: ${panel.keyframeMoment}
 - Subjects: ${(panel.subjects || []).join(", ") || "ไม่มี"}
 - References: ${(panel.referencePictures || []).join(", ") || "ไม่มี"}
-- Camera: ${panel.camera}
+- Camera: ${camera.lensMm}, ${camera.shotSize}, ${camera.angle}, ${camera.perspective}, ${camera.height}; ${camera.position}; focus ${camera.focusDescription}; screen direction ${camera.screenDirectionCode}; axis ${camera.continuity.axisId}/${camera.continuity.cameraSide}; eyeline ${camera.continuity.eyelineMatchId}/${camera.continuity.eyelineDirection}
 - Composition: ${panel.composition}
 - Continuity: ${(panel.continuityNotes || []).join("; ") || "ไม่มีข้อมูล"}
 - Negative constraints: ${(panel.negativeConstraints || []).join("; ") || "ไม่มีข้อมูล"}
 
 \`\`\`text
 ${panel.prompt}
-\`\`\``).join("\n\n");
+\`\`\``;
+  }).join("\n\n");
   return `# Storyboard key image prompt: ${value.projectTitle}
 
 - Shots: ${value.shotCount}
@@ -77,14 +80,14 @@ ${list(value.usageGuide)}
 export function renderShots(value) {
   const shots = value.shots?.map((shot) => {
     const dialogue = shot.dialogue?.length
-      ? shot.dialogue.map((line) => `- ${line.speaker} [${line.language}]: “${line.line}” (${line.performance})`).join("\n")
+      ? shot.dialogue.map((line) => `- ${line.speaker} [${line.language}; ${line.delivery || "unspecified"}; lip-sync=${typeof line.lipSync === "boolean" ? line.lipSync : "unspecified"}]: “${line.line}” (${line.performance})`).join("\n")
       : "- ไม่มีบทพูด";
     const actionBeats = shot.actionBeats?.length
       ? shot.actionBeats.map((beat) => `${beat.order}. [${beat.startOffset ?? "?"}s-${beat.endOffset ?? "?"}s] ${beat.action} → ${beat.result}`).join("\n")
       : `1. ${shot.action || "ไม่มีข้อมูล"}`;
     const cameraPlan = describeCameraPlan(shot.camera, shot.cameraContinuity);
     const camera = typeof shot.camera === "object"
-      ? `- Lens: ${cameraPlan.lensMm}\n- Shot size: ${cameraPlan.shotSize}\n- Angle: ${cameraPlan.angle}\n- Perspective: ${cameraPlan.perspective}\n- Height: ${cameraPlan.height}\n- Position: ${cameraPlan.position}\n- Primary movement: ${cameraPlan.movement}\n- Focus: ${cameraPlan.focusDescription}\n- Screen direction: ${cameraPlan.screenDirection}\n- Camera intent: ${cameraPlan.intent}\n- Axis: ${cameraPlan.continuity.axis}\n- Eyeline: ${cameraPlan.continuity.eyeline}\n- Entry/exit direction: ${cameraPlan.continuity.entryDirection}\n- Previous-shot bridge: ${cameraPlan.continuity.previousShotBridge}`
+      ? `- Lens: ${cameraPlan.lensMm}\n- Shot size: ${cameraPlan.shotSize}\n- Angle: ${cameraPlan.angle}\n- Perspective: ${cameraPlan.perspective}\n- Height: ${cameraPlan.height}\n- Position: ${cameraPlan.position}\n- Primary movement: ${cameraPlan.movement}\n- Focus: ${cameraPlan.focusDescription}\n- Screen direction: ${cameraPlan.screenDirection} (${cameraPlan.screenDirectionCode}; subject ${cameraPlan.screenDirectionSubject})\n- Camera intent: ${cameraPlan.intent}\n- Axis: ${cameraPlan.continuity.axis} [${cameraPlan.continuity.axisId}; side ${cameraPlan.continuity.cameraSide}; ${cameraPlan.continuity.axisTransition}]\n- Eyeline: ${cameraPlan.continuity.eyeline} [${cameraPlan.continuity.eyelineMatchId}; ${cameraPlan.continuity.eyelineDirection}; ${cameraPlan.continuity.eyelineTransition}]\n- Entry/exit direction: ${cameraPlan.continuity.entryDirection} / ${cameraPlan.continuity.exitDirection}\n- Camera continuity motivation: ${cameraPlan.continuity.changeMotivation}\n- Previous-shot bridge: ${cameraPlan.continuity.previousShotBridge}`
       : `- ${shot.camera || "ไม่มีข้อมูล"}`;
     const sound = typeof shot.sound === "object"
       ? `- Ambience: ${shot.sound.ambience}\n- Sync effects: ${(shot.sound.syncEffects || []).join(", ") || "ไม่มี"}\n- Voice: ${shot.sound.voice}\n- Music: ${shot.sound.music}\n- Sound bridge: ${shot.sound.bridge}`

@@ -6,7 +6,19 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { generateJson, invalidateStateForStage, normalizeExistingReferences, runNewWorkflow, runRegeneratePromptWorkflow, runResumeWorkflow, runRollbackWorkflow } from "../src/workflow.js";
 import { saveSession } from "../src/session.js";
 
+function fakeCameraPlan(number) {
+  const camera = { lensMm: "50mm", shotSize: "MS", angle: "eye-level", perspective: "objective", height: "eye", position: "across the table", primaryMovement: { type: "dolly-in", direction: "toward Subject 1", speed: "slow", motivation: "intensify the visible emotional shift" }, focus: { subject: "Subject 1's face", depth: "shallow", transition: "none" }, screenDirection: "Subject 1 holds frame-left", screenDirectionCode: "stationary", screenDirectionSubject: "Subject 1", intent: "Draw attention to the emotional change" };
+  const cameraContinuity = { axis: "near side of the table dialogue axis", axisId: "restaurant-table-axis", cameraSide: "left", axisTransition: number === 1 ? "initial" : "preserve", eyeline: "Subject 1 looks frame-right", eyelineMatchId: "subject-table-look", eyelineDirection: "frame-right", eyelineTransition: number === 1 ? "initial" : "preserve", entryDirection: "none", exitDirection: "none", changeMotivation: number === 1 ? "establish the initial table geography" : "preserve the established table geography", previousShotBridge: number === 1 ? "initial setup" : "continues on the same side of the table axis" };
+  return { camera, cameraContinuity };
+}
+
+function fakeStoryboardCamera(number) {
+  const { camera, cameraContinuity } = fakeCameraPlan(number);
+  return { ...camera, continuity: cameraContinuity };
+}
+
 function fakeShot({ number, startTime, endTime, objective, action, composition, emotion }) {
+  const { camera, cameraContinuity } = fakeCameraPlan(number);
   return {
     number,
     startTime,
@@ -29,8 +41,8 @@ function fakeShot({ number, startTime, endTime, objective, action, composition, 
     action,
     actionBeats: [{ order: 1, startOffset: 0.5, endOffset: Math.min(2.5, endTime - startTime), action, result: `Visible result of ${action}` }],
     endState: `State leaving shot ${number}`,
-    camera: { lensMm: "50mm", shotSize: "MS", angle: "eye-level", perspective: "objective", height: "eye", position: "across the table", primaryMovement: { type: "dolly-in", direction: "toward Subject 1", speed: "slow", motivation: "intensify the visible emotional shift" }, focus: { subject: "Subject 1's face", depth: "shallow", transition: "none" }, screenDirection: "Subject 1 holds frame-left", intent: "Draw attention to the emotional change" },
-    cameraContinuity: { axis: "camera remains on the near side of the table axis", eyeline: "Subject 1 looks frame-right", entryDirection: "none", previousShotBridge: number === 1 ? "initial setup" : "continues on the same side of the table axis" },
+    camera,
+    cameraContinuity,
     composition,
     lighting: "warm",
     dialogue: [],
@@ -137,9 +149,9 @@ class FakeLlm {
           { pictureId: "Picture 3", usage: "table material and position" }
         ],
         panels: [
-          { shotNumber: 1, timeRange: "00:00.000-00:05.000", keyframeMoment: "Subject 1 looks away", subjects: ["Subject 1"], referencePictures: ["Picture 1", "Picture 2", "Picture 3"], camera: "50mm medium eye-level", composition: "two-shot table geography", prompt: panelPrompt, continuityNotes: ["same coat"], negativeConstraints: ["no extra characters"] },
-          { shotNumber: 2, timeRange: "00:05.000-00:10.000", keyframeMoment: "Subject 1 withdraws her hand", subjects: ["Subject 1"], referencePictures: ["Picture 1", "Picture 2", "Picture 3"], camera: "50mm medium eye-level", composition: "hand and face remain readable", prompt: panelPrompt, continuityNotes: ["same table"], negativeConstraints: ["no duplicate hands"] },
-          { shotNumber: 3, timeRange: "00:10.000-00:15.000", keyframeMoment: "Subject 1 leaves", subjects: ["Subject 1"], referencePictures: ["Picture 1", "Picture 2"], camera: "50mm medium eye-level", composition: "exit held frame right", prompt: panelPrompt, continuityNotes: ["same screen direction"], negativeConstraints: ["no extra characters"] }
+          { shotNumber: 1, timeRange: "00:00.000-00:05.000", keyframeMoment: "Subject 1 looks away", subjects: ["Subject 1"], referencePictures: ["Picture 1", "Picture 2", "Picture 3"], camera: fakeStoryboardCamera(1), composition: "two-shot table geography", prompt: panelPrompt, continuityNotes: ["same coat"], negativeConstraints: ["no extra characters"] },
+          { shotNumber: 2, timeRange: "00:05.000-00:10.000", keyframeMoment: "Subject 1 withdraws her hand", subjects: ["Subject 1"], referencePictures: ["Picture 1", "Picture 2", "Picture 3"], camera: fakeStoryboardCamera(2), composition: "hand and face remain readable", prompt: panelPrompt, continuityNotes: ["same table"], negativeConstraints: ["no duplicate hands"] },
+          { shotNumber: 3, timeRange: "00:10.000-00:15.000", keyframeMoment: "Subject 1 leaves", subjects: ["Subject 1"], referencePictures: ["Picture 1", "Picture 2"], camera: fakeStoryboardCamera(3), composition: "exit held frame right", prompt: panelPrompt, continuityNotes: ["same screen direction"], negativeConstraints: ["no extra characters"] }
         ],
         masterPrompt,
         negativePrompt: "text, labels, subtitles, speech bubbles, watermark, logo, UI, extra panels, duplicated people, ghost poses, multiple time phases, inconsistent wardrobe, broken anatomy, changed geography",

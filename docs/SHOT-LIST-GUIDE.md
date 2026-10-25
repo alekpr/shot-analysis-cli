@@ -52,7 +52,9 @@
 
 หนึ่ง shot มี primary angle และ primary movement อย่างละหนึ่งแบบ `pan` ใช้ทิศซ้าย/ขวา ส่วน `tilt` ใช้ขึ้น/ลง `dolly` เคลื่อนตำแหน่งกล้องและเปลี่ยน perspective ส่วน `zoom` เปลี่ยนทางยาวโฟกัสโดยกล้องอยู่กับที่ มุมหรือเทคนิคเด่น เช่น `dutch-angle`, `worms-eye`, `top-down` และ `dolly-zoom` ต้องมี motivation ต่อเรื่องชัดเจน
 
-Shot ที่มีบทพูดใช้ `CU`, `MCU`, `MS` หรือ `MLS` เพื่อให้ใบหน้าและปากอ่านได้สำหรับ lip-sync ทุก shot เก็บ `cameraContinuity.axis`, `eyeline`, `entryDirection` และ `previousShotBridge` เพื่อรักษา 180-degree line, screen direction และเส้นสายตาข้าม cut
+บทพูดแบบ `on-camera` ที่ต้องซิงก์ปากใช้ `ECU`, `CU`, `MCU`, `MS` หรือ `MLS`; หากใช้ ECU ต้อง focus ที่ใบหน้าหรือปาก ส่วน `offscreen` และ `voice-over` ใช้ `lipSync=false`
+
+ทุก shot เก็บ `cameraContinuity` แบบตรวจข้าม shot ได้ โดยใช้ `axisId` และ `cameraSide` ล็อกแนว 180 องศา, `eyelineMatchId` และ `eyelineDirection` ล็อกเส้นสายตา, `screenDirectionCode` กับ `screenDirectionSubject` ระบุทิศของ Subject และใช้ `entryDirection`/`exitDirection` เชื่อมการเคลื่อนที่ การเปลี่ยนด้านของ axis ต้องใช้ `axisTransition=motivated-cross`; การเริ่ม geography ใหม่ใช้ `new-axis` พร้อมเหตุผล
 
 ## Validation Gates
 
@@ -61,7 +63,8 @@ Shot ที่มีบทพูดใช้ `CU`, `MCU`, `MS` หรือ `MLS
 - `duration` ตรงกับผลต่างของ `startTime` และ `endTime`
 - Shot สุดท้ายจบตรงความยาวเรื่อง และ `totalDuration` ตรงกับ `durationSeconds`
 - ทุก shot มี spatial anchor, visible start/end state, causal link, action beats, camera specification, sound, transition, continuity และ visible emotion cue
-- Camera ใช้ canonical angle/perspective/shot size, มี primary movement เดียวพร้อม direction/speed/motivation, focus แยกจาก movement และมี camera continuity ครบ
+- Camera ใช้ canonical angle/perspective/shot size, มี primary movement เดียวพร้อม direction/speed/motivation, focus แยกจาก movement และมี camera continuity ที่ตรวจเทียบกับ shot ก่อนหน้า
+- Storyboard panel ต้องคัดลอก structured camera plan จาก shot ต้นฉบับครบทุก field และ validator ปฏิเสธการเปลี่ยนมุม เลนส์ movement, focus หรือ continuity ระหว่างทาง
 - Shot ที่สองเป็นต้นไปมี `continuityBridge` และไม่บังคับให้ `startState` ซ้ำข้อความจาก `endState` ของ shot ก่อน
 - `actionBeats` เรียงลำดับ มีทั้ง action กับผลที่เกิดขึ้น และมีช่วงเวลาที่ไม่ซ้อนกันภายใน duration
 - Subject ที่ปรากฏใน generation prompt ต้องถูกประกาศเป็น `subjects` หรือ `offscreenSubjects` ของ shot นั้น

@@ -25,7 +25,12 @@ test("shot prompt requires production-level action, camera, sound, and continuit
     "perspective",
     "primaryMovement",
     "screenDirection",
-    "cameraContinuity"
+    "screenDirectionCode",
+    "cameraContinuity",
+    "axisId",
+    "eyelineMatchId",
+    "delivery",
+    "lipSync"
   ]) {
     assert.match(prompt, new RegExp(`\\"${field}\\"`));
   }
@@ -62,6 +67,14 @@ test("storyboard prompt requests one still panel per shot in one contact sheet",
   assert.match(prompt, /still keyframe เพียงหนึ่งขณะ/);
   assert.match(prompt, /หนึ่งภาพ/);
   assert.match(prompt, /ห้ามสร้าง title, subtitle/);
+  assert.match(prompt, /"camera":\{"lensMm"/);
+  assert.match(prompt, /structured camera plan|คัดลอกจาก SHOT/);
+});
+
+test("storyboard prompt expands legacy camera strings for resumable sessions", () => {
+  const prompt = storyboardPrompt({}, { shots: [{ camera: { lensMm: "35mm", movement: "locked", focus: "face" } }] }, {}, "9:16");
+  assert.match(prompt, /"primaryMovement": \{/);
+  assert.match(prompt, /"axisId": "unspecified"/);
 });
 
 test("shot and system prompts prevent motion resets and repeated actions", () => {

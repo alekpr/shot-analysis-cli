@@ -48,3 +48,5 @@
 - 2026-10-23 — Live verification ผ่าน: `shot-analysis doctor` เชื่อมต่อ Gemini `gemini-3.5-flash` และตรวจ JSON output สำเร็จใน 1749ms
 - 2026-10-25 — เริ่ม Task 13: นำ camera guide มาสร้าง structured camera schema, semantic validation และ continuity ระหว่าง shot
 - 2026-10-25 — Task 13 เสร็จ: เพิ่ม canonical camera grammar, semantic validation, legacy-session normalization และส่งข้อมูลกล้องครบถึง shot Markdown, storyboard และ final renderer; `npm run check`, `npm test` (79 tests), `npm audit` และ `npm pack --dry-run` ผ่าน
+- 2026-10-25 — เปิด Task 13 กลับเป็น IN PROGRESS หลัง code review พบว่า cross-shot continuity และ storyboard camera preservation ยังไม่ได้บังคับจริง รวมถึง semantic edge cases ของทิศกล้องและ lip-sync
+- 2026-10-25 — ปิด Task 13 หลังแก้ review findings: ตรวจ axis/eyeline/screen direction ข้าม shot, บังคับ structured camera ใน storyboard, รองรับทิศกล้องไทย, ตรวจ movement contradictions, แยก on-camera/offscreen/voice-over lip-sync และ normalize session เก่าสำหรับ storyboard; `npm run check` และ `npm test` ผ่าน 89 tests
