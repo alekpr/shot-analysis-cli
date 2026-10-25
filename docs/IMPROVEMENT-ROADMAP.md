@@ -1,6 +1,6 @@
 # Shot Analysis CLI — Improvement Roadmap
 
-อัปเดตล่าสุด: 2026-10-23
+อัปเดตล่าสุด: 2026-10-25
 
 เอกสารนี้เป็นแผนงานหลักสำหรับยกระดับระบบจาก CLI ที่ใช้งานแบบมีผู้ควบคุม ไปเป็นเครื่องมือที่ทนต่อ API failure, ย้ายเครื่องได้, ตรวจสอบผลลัพธ์ได้ และเผยแพร่ให้ผู้ใช้ทั่วไปได้อย่างมั่นใจ
 
@@ -27,6 +27,7 @@
 | 10 | P2 | Provider contract และ failure integration tests | DONE | ครอบคลุม 429/503, timeout, truncated output, empty 200 และ provider response shapes |
 | 11 | P2 | CLI automation/diagnostics | DONE | รองรับ status discovery แบบเดียวกับ resume, machine-readable output และข้อความ error ที่ระบุขั้นตอนแก้ไข |
 | 12 | P2 | CI และ release packaging | DONE | มี GitHub Actions, local CI-equivalent ผ่าน, check ครบทุก JS, package ไม่มี demo เก่า, มี LICENSE และ pack test |
+| 13 | P1 | Structured camera grammar และ camera continuity | DONE | แยก angle/perspective/size/movement/focus, ตรวจคำสั่งกล้องขัดกัน, รักษา axis/eyeline/screen direction และส่งต่อถึง storyboard/final prompt |
 
 ## หลักการทำงาน
 
@@ -45,3 +46,5 @@
 - 2026-10-23 — Task 8–11 เสร็จ: stage regeneration, dependency invalidation, history/rollback, provider contract tests และ JSON status; `npm test` ผ่าน 75 tests
 - 2026-10-23 — Task 12 เสร็จ: CI สำหรับ Node 20/22, syntax check ครบทุก JS, MIT LICENSE และ package allowlist; `npm run check`, `npm test`, `npm audit` และ `npm pack --dry-run` ผ่าน
 - 2026-10-23 — Live verification ผ่าน: `shot-analysis doctor` เชื่อมต่อ Gemini `gemini-3.5-flash` และตรวจ JSON output สำเร็จใน 1749ms
+- 2026-10-25 — เริ่ม Task 13: นำ camera guide มาสร้าง structured camera schema, semantic validation และ continuity ระหว่าง shot
+- 2026-10-25 — Task 13 เสร็จ: เพิ่ม canonical camera grammar, semantic validation, legacy-session normalization และส่งข้อมูลกล้องครบถึง shot Markdown, storyboard และ final renderer; `npm run check`, `npm test` (79 tests), `npm audit` และ `npm pack --dry-run` ผ่าน

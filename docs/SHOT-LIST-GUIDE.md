@@ -15,7 +15,7 @@
 3. **สร้าง geography ก่อน action ซับซ้อน** — บอกตำแหน่ง subject, อันตราย, เป้าหมาย, ทางเข้าออก และระยะห่าง แล้วรักษา screen direction ข้าม shot
 4. **เหตุเกิดก่อนผล** — ต้องเห็น contact ก่อน reaction, การปล่อยก่อนของตก, การกดปุ่มก่อนกลไกทำงาน และการเปลี่ยน state ก่อนนำ state ใหม่ไปใช้
 5. **แยกสิ่งที่เห็นออกจากข้อมูลที่ส่งต่อ** — `startState` และ `endState` อธิบายเฉพาะสิ่งที่มองเห็นในเฟรมแรกและเฟรมสุดท้าย ส่วน `continuityBridge` บอกว่าอะไรถูกส่งต่อ เปลี่ยนไป หรืออยู่นอกเฟรมเมื่อมี hard cut หรือเปลี่ยนสถานที่
-6. **กล้องต้องมีตำแหน่งและเหตุผล** — ระบุ lens, shot size, angle, position, movement และ focus กล้องสั่น หลบ หรือ whip pan เมื่อมีเหตุการณ์ในฉากรองรับ และห้ามเคลื่อนผ่านผนังหรือ subject
+6. **กล้องต้องมีตำแหน่งและเหตุผล** — แยก angle, perspective, shot size, position, primary movement และ focus เป็นคนละข้อมูล ทุกการเลือกต้องรับใช้ action, reveal หรืออารมณ์ และห้ามเคลื่อนผ่านผนังหรือ subject
 7. **เฟรมต้องอธิบายความสัมพันธ์** — เมื่อการเอาตัวรอดหรือ action ต้องอาศัยพื้นที่ ควรเห็น subject, อันตราย และเป้าหมายในเฟรมเดียวกัน หรือมี spatial cue จาก shot ก่อนหน้า
 8. **เสียงเป็นส่วนหนึ่งของจังหวะ** — แยก ambience, sync effects, voice, music และ sound bridge เพื่อให้ contact, ฝีเท้า ลมหายใจ หรือเสียงนอกจอสัมพันธ์กับภาพ
 9. **ติดตาม continuity เป็น state** — ตรวจ identity, wardrobe, มือที่ถือ prop, สภาพ prop, ตำแหน่ง, แสง, ความเปียก/เสียหาย, อารมณ์ และสิ่งที่ออกจากฉาก
@@ -39,6 +39,21 @@
 | การแสดง | `emotion` | แปลงอารมณ์เป็น cue ที่มองเห็นหรือได้ยิน |
 | ข้อห้าม | `negativeConstraints` | ป้องกันความผิดพลาดเฉพาะ shot |
 
+## Camera grammar
+
+ระบบใช้ศัพท์กล้องแบบกำหนดค่าเพื่อให้ LLM, validator, storyboard และ generation prompt ตีความตรงกัน:
+
+- `shotSize`: `ECU`, `CU`, `MCU`, `MS`, `MLS`, `LS`, `ELS`
+- `angle`: `eye-level`, `high-angle`, `low-angle`, `worms-eye`, `top-down`, `dutch-angle`, `ground-level`
+- `perspective`: `objective`, `ots`, `pov`
+- `height`: `ground`, `low`, `waist`, `chest`, `shoulder`, `eye`, `high`, `overhead`
+- `primaryMovement.type`: `locked-off`, `pan`, `tilt`, `dolly-in`, `dolly-out`, `zoom-in`, `zoom-out`, `tracking`, `trucking`, `crane`, `jib`, `dolly-zoom`, `handheld`, `steadicam`, `gimbal`, `arc`, `orbit`
+- `focus.depth`: `deep`, `moderate`, `shallow`; การเปลี่ยนระนาบใช้ `focus.transition=rack-focus`
+
+หนึ่ง shot มี primary angle และ primary movement อย่างละหนึ่งแบบ `pan` ใช้ทิศซ้าย/ขวา ส่วน `tilt` ใช้ขึ้น/ลง `dolly` เคลื่อนตำแหน่งกล้องและเปลี่ยน perspective ส่วน `zoom` เปลี่ยนทางยาวโฟกัสโดยกล้องอยู่กับที่ มุมหรือเทคนิคเด่น เช่น `dutch-angle`, `worms-eye`, `top-down` และ `dolly-zoom` ต้องมี motivation ต่อเรื่องชัดเจน
+
+Shot ที่มีบทพูดใช้ `CU`, `MCU`, `MS` หรือ `MLS` เพื่อให้ใบหน้าและปากอ่านได้สำหรับ lip-sync ทุก shot เก็บ `cameraContinuity.axis`, `eyeline`, `entryDirection` และ `previousShotBridge` เพื่อรักษา 180-degree line, screen direction และเส้นสายตาข้าม cut
+
 ## Validation Gates
 
 - Shot number เรียงจาก 1 โดยไม่ข้าม
@@ -46,6 +61,7 @@
 - `duration` ตรงกับผลต่างของ `startTime` และ `endTime`
 - Shot สุดท้ายจบตรงความยาวเรื่อง และ `totalDuration` ตรงกับ `durationSeconds`
 - ทุก shot มี spatial anchor, visible start/end state, causal link, action beats, camera specification, sound, transition, continuity และ visible emotion cue
+- Camera ใช้ canonical angle/perspective/shot size, มี primary movement เดียวพร้อม direction/speed/motivation, focus แยกจาก movement และมี camera continuity ครบ
 - Shot ที่สองเป็นต้นไปมี `continuityBridge` และไม่บังคับให้ `startState` ซ้ำข้อความจาก `endState` ของ shot ก่อน
 - `actionBeats` เรียงลำดับ มีทั้ง action กับผลที่เกิดขึ้น และมีช่วงเวลาที่ไม่ซ้อนกันภายใน duration
 - Subject ที่ปรากฏใน generation prompt ต้องถูกประกาศเป็น `subjects` หรือ `offscreenSubjects` ของ shot นั้น

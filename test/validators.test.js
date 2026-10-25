@@ -25,7 +25,8 @@ function validShot(number, startTime, endTime) {
     action: `Subject 1 moves toward mark ${number}.`,
     actionBeats: [{ order: 1, startOffset: 0.5, endOffset: 2, action: `Takes step ${number}`, result: `Reaches mark ${number}` }],
     endState: `Subject 1 reaches mark ${number}.`,
-    camera: { lensMm: "35mm", shotSize: "medium", angle: "eye level", position: "left of the table", movement: "short track right", focus: "Subject 1" },
+    camera: { lensMm: "35mm", shotSize: "MS", angle: "eye-level", perspective: "objective", height: "eye", position: "left of the table", primaryMovement: { type: "tracking", direction: "right, parallel to Subject 1", speed: "slow", motivation: "follow the step and preserve the door reveal" }, focus: { subject: "Subject 1", depth: "moderate", transition: "none" }, screenDirection: "Subject 1 moves frame-left to frame-right", intent: "Keep the movement readable while retaining the destination" },
+    cameraContinuity: { axis: "camera remains on the room side of the door axis", eyeline: "Subject 1 looks frame-right toward the door", entryDirection: "Subject 1 continues frame-left to frame-right", previousShotBridge: number === 1 ? "initial setup" : "continues on the same side of the axis" },
     composition: "Door remains visible frame right.",
     lighting: "Soft window light.",
     dialogue: [],
@@ -105,7 +106,7 @@ test("rejects an underspecified production shot", () => {
   assert.match(errors, /ไม่มี spatialAnchor/);
   assert.match(errors, /ไม่มี cinematicIntent/);
   assert.match(errors, /ต้องมี actionBeats/);
-  assert.match(errors, /camera ไม่มี lensMm/);
+  assert.match(errors, /camera ต้องเป็น object/);
 });
 
 test("rejects missing continuity bridges and repeated actions across adjacent shots", () => {

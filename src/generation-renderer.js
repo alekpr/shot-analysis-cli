@@ -1,4 +1,5 @@
 import { secondsToTime } from "./utils.js";
+import { describeCameraPlan } from "./camera.js";
 
 function assets(referencePrompts = {}) {
   return [...(referencePrompts.existingReferences || []), ...(referencePrompts.assets || [])]
@@ -35,12 +36,13 @@ function sourceBlock(text, label, number, nextNumber) {
 }
 
 function canonicalShotDetails(shot, referencePrompts, visualDirection, pictureToken) {
+  const camera = describeCameraPlan(shot.camera, shot.cameraContinuity);
   const subjects = (shot.subjects || []).map((item) => `<${item}>`).join(", ") || "No visible subject";
   const offscreen = (shot.offscreenSubjects || []).map((item) => `<${item}>`).join(", ") || "none";
   const refs = referencesForShot(referencePrompts, shot.number).map(pictureToken).join(", ") || "none";
   const beats = (shot.actionBeats || []).map((beat) => `${beat.startOffset}-${beat.endOffset}s: ${beat.action}; result: ${beat.result}`).join(" Then ") || shot.action;
   const dialogue = (shot.dialogue || []).map((item) => `<${item.speaker}> <d>[${item.language || "English"}] ${item.line}</d>`).join(" ") || "No dialogue.";
-  return `Visual direction: ${visualDirection?.label || "approved style"}; Mood: ${visualDirection?.mood || "approved mood"}. Camera starts at ${shot.camera?.position}, ${shot.camera?.shotSize}, ${shot.camera?.angle}, ${shot.camera?.lensMm}, composed as ${shot.composition}, focused on ${shot.camera?.focus}. Visible subjects: ${subjects}; offscreen subjects: ${offscreen}; reference images: ${refs}. Spatial anchor: ${shot.spatialAnchor}. Start state: ${shot.startState}. Causal link: ${shot.causalLink}. Action sequence: ${beats}. Camera response: ${shot.camera?.movement}. Lighting: ${shot.lighting}. Performance changes from ${shot.emotion?.start} to ${shot.emotion?.end}, shown by ${shot.emotion?.visibleCue}. Dialogue: ${dialogue} Sound: ambience ${shot.sound?.ambience}; synchronized effects ${(shot.sound?.syncEffects || []).join(", ") || "none"}; voice ${shot.sound?.voice}; music ${shot.sound?.music}; bridge ${shot.sound?.bridge}. End state: ${shot.endState}. Continuity in: ${(shot.continuityIn || []).join(", ")}. Continuity out: ${(shot.continuityOut || []).join(", ")}. Transition: ${shot.transition?.type}, motivated by ${shot.transition?.motivation}. Constraints: ${(shot.negativeConstraints || []).join(", ") || "preserve approved continuity"}.`;
+  return `Visual direction: ${visualDirection?.label || "approved style"}; Mood: ${visualDirection?.mood || "approved mood"}. Camera starts at ${camera.position}, ${camera.shotSize}, ${camera.angle}, ${camera.perspective} perspective, ${camera.height} height, ${camera.lensMm}, composed as ${shot.composition}, focused on ${camera.focusDescription}. Screen direction: ${camera.screenDirection}. Camera intent: ${camera.intent}. Camera continuity: axis ${camera.continuity.axis}; eyeline ${camera.continuity.eyeline}; entry/exit ${camera.continuity.entryDirection}; bridge from previous shot ${camera.continuity.previousShotBridge}. Visible subjects: ${subjects}; offscreen subjects: ${offscreen}; reference images: ${refs}. Spatial anchor: ${shot.spatialAnchor}. Start state: ${shot.startState}. Causal link: ${shot.causalLink}. Action sequence: ${beats}. Primary camera movement: ${camera.movement}. Lighting: ${shot.lighting}. Performance changes from ${shot.emotion?.start} to ${shot.emotion?.end}, shown by ${shot.emotion?.visibleCue}. Dialogue: ${dialogue} Sound: ambience ${shot.sound?.ambience}; synchronized effects ${(shot.sound?.syncEffects || []).join(", ") || "none"}; voice ${shot.sound?.voice}; music ${shot.sound?.music}; bridge ${shot.sound?.bridge}. End state: ${shot.endState}. Continuity in: ${(shot.continuityIn || []).join(", ")}. Continuity out: ${(shot.continuityOut || []).join(", ")}. Transition: ${shot.transition?.type}, motivated by ${shot.transition?.motivation}. Constraints: ${(shot.negativeConstraints || []).join(", ") || "preserve approved continuity"}.`;
 }
 
 function renderMinimax({ creativeText, story, shots, prefix, visualDirection, referencePrompts }) {

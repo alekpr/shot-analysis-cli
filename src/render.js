@@ -1,4 +1,5 @@
 import { secondsToTime } from "./utils.js";
+import { describeCameraPlan } from "./camera.js";
 
 function list(items = []) {
   return items.length ? items.map((item) => `- ${item}`).join("\n") : "- ไม่มีข้อมูล";
@@ -81,8 +82,9 @@ export function renderShots(value) {
     const actionBeats = shot.actionBeats?.length
       ? shot.actionBeats.map((beat) => `${beat.order}. [${beat.startOffset ?? "?"}s-${beat.endOffset ?? "?"}s] ${beat.action} → ${beat.result}`).join("\n")
       : `1. ${shot.action || "ไม่มีข้อมูล"}`;
+    const cameraPlan = describeCameraPlan(shot.camera, shot.cameraContinuity);
     const camera = typeof shot.camera === "object"
-      ? `- Lens: ${shot.camera.lensMm}\n- Shot size: ${shot.camera.shotSize}\n- Angle: ${shot.camera.angle}\n- Position: ${shot.camera.position}\n- Movement: ${shot.camera.movement}\n- Focus: ${shot.camera.focus}`
+      ? `- Lens: ${cameraPlan.lensMm}\n- Shot size: ${cameraPlan.shotSize}\n- Angle: ${cameraPlan.angle}\n- Perspective: ${cameraPlan.perspective}\n- Height: ${cameraPlan.height}\n- Position: ${cameraPlan.position}\n- Primary movement: ${cameraPlan.movement}\n- Focus: ${cameraPlan.focusDescription}\n- Screen direction: ${cameraPlan.screenDirection}\n- Camera intent: ${cameraPlan.intent}\n- Axis: ${cameraPlan.continuity.axis}\n- Eyeline: ${cameraPlan.continuity.eyeline}\n- Entry/exit direction: ${cameraPlan.continuity.entryDirection}\n- Previous-shot bridge: ${cameraPlan.continuity.previousShotBridge}`
       : `- ${shot.camera || "ไม่มีข้อมูล"}`;
     const sound = typeof shot.sound === "object"
       ? `- Ambience: ${shot.sound.ambience}\n- Sync effects: ${(shot.sound.syncEffects || []).join(", ") || "ไม่มี"}\n- Voice: ${shot.sound.voice}\n- Music: ${shot.sound.music}\n- Sound bridge: ${shot.sound.bridge}`

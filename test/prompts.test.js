@@ -21,12 +21,18 @@ test("shot prompt requires production-level action, camera, sound, and continuit
     "continuityBridge",
     "causalLink",
     "startOffset",
-    "endOffset"
+    "endOffset",
+    "perspective",
+    "primaryMovement",
+    "screenDirection",
+    "cameraContinuity"
   ]) {
     assert.match(prompt, new RegExp(`\\"${field}\\"`));
   }
   assert.match(prompt, /เหตุเกิดก่อนผลเสมอ/);
   assert.match(prompt, /ห้ามเฉลี่ยเวลาเท่ากันโดยไม่มีเหตุผล/);
+  assert.match(prompt, /pan ใช้ซ้าย\/ขวาและ tilt ใช้ขึ้น\/ลง/);
+  assert.match(prompt, /rack focus อยู่ใน focus\.transition/);
 });
 
 test("final prompt carries production shot details into generation", () => {

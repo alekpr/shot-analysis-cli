@@ -3,7 +3,7 @@ import test from "node:test";
 import { renderGenerationPrompt } from "../src/generation-renderer.js";
 
 const story = { title: "Test", logline: "A test scene", durationSeconds: 3, dialogueLanguage: "English", characters: [{ id: "Subject 1", name: "A", role: "lead", description: "person", continuityRules: ["same coat"] }] };
-const shot = { number: 1, startTime: 0, endTime: 3, camera: { position: "front", shotSize: "medium", angle: "eye level", lensMm: "50mm", focus: "face", movement: "locked" }, composition: "centered", subjects: ["Subject 1"], offscreenSubjects: [], spatialAnchor: "room", startState: "still", causalLink: "a cause", action: "turns", actionBeats: [{ startOffset: 0, endOffset: 2, action: "turns", result: "faces camera" }], lighting: "soft", emotion: { start: "calm", end: "alert", visibleCue: "eyes widen" }, dialogue: [], sound: { ambience: "room", syncEffects: [], voice: "none", music: "none", bridge: "room" }, endState: "faces camera", continuityIn: [], continuityOut: [], transition: { type: "cut", motivation: "reveal" }, negativeConstraints: [] };
+const shot = { number: 1, startTime: 0, endTime: 3, camera: { position: "front", shotSize: "MS", angle: "eye-level", perspective: "objective", height: "eye", lensMm: "50mm", focus: { subject: "face", depth: "shallow", transition: "none" }, primaryMovement: { type: "locked-off", direction: "none", speed: "static", motivation: "hold the reveal clearly" }, screenDirection: "Subject 1 faces camera", intent: "Hold attention on the reaction" }, cameraContinuity: { axis: "front axis", eyeline: "toward lens", entryDirection: "none", previousShotBridge: "initial setup" }, composition: "centered", subjects: ["Subject 1"], offscreenSubjects: [], spatialAnchor: "room", startState: "still", causalLink: "a cause", action: "turns", actionBeats: [{ startOffset: 0, endOffset: 2, action: "turns", result: "faces camera" }], lighting: "soft", emotion: { start: "calm", end: "alert", visibleCue: "eyes widen" }, dialogue: [], sound: { ambience: "room", syncEffects: [], voice: "none", music: "none", bridge: "room" }, endState: "faces camera", continuityIn: [], continuityOut: [], transition: { type: "cut", motivation: "reveal" }, negativeConstraints: [] };
 const refs = { assets: [{ pictureId: "Picture 1", assetType: "character", name: "A sheet", linkedSubjects: ["Subject 1"], purpose: "identity", usedInShots: [1] }] };
 
 test("renderer owns MiniMax headings, mappings and shot timing", () => {
@@ -11,6 +11,9 @@ test("renderer owns MiniMax headings, mappings and shot timing", () => {
   assert.ok(output.startsWith("DY,subject_definitions:"));
   assert.match(output, /<Picture 1> maps to character asset A sheet/);
   assert.match(output, /\[Shot 1\]/);
+  assert.match(output, /objective perspective, eye height/);
+  assert.match(output, /Primary camera movement: locked-off; direction none; speed static/);
+  assert.match(output, /Camera continuity: axis front axis; eyeline toward lens/);
 });
 
 test("renderer owns Seedance reference mapping and timecoded beats", () => {

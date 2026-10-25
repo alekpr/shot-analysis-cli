@@ -1,4 +1,5 @@
 import { secondsToTime } from "./utils.js";
+import { validateCameraPlan } from "./camera.js";
 
 const REQUIRED_FINAL_SECTIONS = [
   "subject_definitions:",
@@ -221,9 +222,7 @@ export function validateShots(value, expectedDuration, expectedShotCount, story)
         }
       });
     }
-    for (const key of ["lensMm", "shotSize", "angle", "position", "movement", "focus"]) {
-      if (!String(shot.camera?.[key] || "").trim()) errors.push(`${shotLabel} camera ไม่มี ${key}`);
-    }
+    errors.push(...validateCameraPlan(shot, shotLabel));
     if (!shot.sound || !Array.isArray(shot.sound.syncEffects)) errors.push(`${shotLabel} ต้องมี sound และ syncEffects`);
     if (!shot.transition?.type || !shot.transition?.motivation) errors.push(`${shotLabel} ต้องมี transition type/motivation`);
     if (!Array.isArray(shot.continuityIn) || !Array.isArray(shot.continuityOut)) errors.push(`${shotLabel} ต้องมี continuityIn/continuityOut`);
