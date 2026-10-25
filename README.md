@@ -86,7 +86,7 @@ SHOT_ANALYSIS_PROVIDER=gemini
 GEMINI_MODEL=gemini-3.5-flash
 ANTHROPIC_MODEL=claude-sonnet-5-5
 DEEPSEEK_MODEL=deepseek-v4-flash
-SHOT_ANALYSIS_TIMEOUT_MS=60000
+SHOT_ANALYSIS_TIMEOUT_MS=180000
 SHOT_ANALYSIS_RETRY_ATTEMPTS=4
 SHOT_ANALYSIS_MAX_OUTPUT_TOKENS=32768
 
@@ -106,6 +106,8 @@ DEEPSEEK_API_KEY=your_deepseek_key
 | DeepSeek | `deepseek` | `DEEPSEEK_MODEL` | `DEEPSEEK_API_KEY` |
 
 ใส่เฉพาะ API key ที่ใช้งานจริงได้ ไม่ต้องใส่ครบทุก provider และไม่ควร commit `.env` ขึ้น Git
+
+`SHOT_ANALYSIS_TIMEOUT_MS` คือเวลารอสูงสุดต่อ API attempt หน่วยเป็นมิลลิวินาที ค่าเริ่มต้น `180000` (3 นาที) รองรับขั้น shot list และ generation prompt ที่มีรายละเอียดมาก หาก provider ยังหมดเวลา สามารถเพิ่มได้สูงสุด `600000` แล้วรัน `shot-analysis resume <folder>` ต่อจาก checkpoint เดิม
 
 CLI ค้นหา `.env` ตามลำดับนี้ โดยค่าที่พบก่อนมีลำดับความสำคัญสูงกว่า:
 

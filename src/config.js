@@ -25,6 +25,8 @@ export const PROVIDERS = {
   }
 };
 
+export const DEFAULT_LLM_TIMEOUT_MS = 180_000;
+
 function nearestEnvFile(startDirectory) {
   let directory = path.resolve(startDirectory);
   while (true) {
@@ -83,7 +85,7 @@ export function resolveConfig(storedConfig, environment = process.env) {
       || (defaultKeyIsAvailable ? providerDefinition.defaultApiKeyEnv : stored.apiKeyEnv)
       || providerDefinition.defaultApiKeyEnv,
     promptPrefix: environment.SHOT_ANALYSIS_PROMPT_PREFIX ?? stored.promptPrefix ?? "DY,",
-    timeoutMs: Number(environment.SHOT_ANALYSIS_TIMEOUT_MS || stored.timeoutMs || 60_000),
+    timeoutMs: Number(environment.SHOT_ANALYSIS_TIMEOUT_MS || stored.timeoutMs || DEFAULT_LLM_TIMEOUT_MS),
     retryAttempts: Number(environment.SHOT_ANALYSIS_RETRY_ATTEMPTS || stored.retryAttempts || 4),
     maxOutputTokens: Number(environment.SHOT_ANALYSIS_MAX_OUTPUT_TOKENS || stored.maxOutputTokens || 32_768)
   };

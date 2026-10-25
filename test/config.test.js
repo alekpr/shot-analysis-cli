@@ -16,7 +16,7 @@ test("environment selects provider and its model without stored settings", () =>
     model: "claude-test-model",
     apiKeyEnv: "ANTHROPIC_API_KEY",
     promptPrefix: "TEST,",
-    timeoutMs: 60_000,
+    timeoutMs: 180_000,
     retryAttempts: 4,
     maxOutputTokens: 32_768
   });

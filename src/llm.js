@@ -1,3 +1,5 @@
+import { DEFAULT_LLM_TIMEOUT_MS } from "./config.js";
+
 export function requireApiKey(settings, envInfo = {}) {
   const value = process.env[settings.apiKeyEnv];
   if (!value) {
@@ -36,7 +38,7 @@ function backoffMilliseconds(attempt, random = Math.random) {
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 export async function requestJson(url, options, {
-  timeoutMs = 60_000,
+  timeoutMs = DEFAULT_LLM_TIMEOUT_MS,
   maxAttempts = 4,
   fetchImpl = fetch,
   sleep = wait,
@@ -104,7 +106,7 @@ export class LlmClient {
 
   #request(url, options) {
     return requestJson(url, options, {
-      timeoutMs: Number(this.settings.timeoutMs) || 60_000,
+      timeoutMs: Number(this.settings.timeoutMs) || DEFAULT_LLM_TIMEOUT_MS,
       maxAttempts: Number(this.settings.retryAttempts) || 4,
       onRetry: ({ attempt, maxAttempts, delay, error }) => {
         console.warn(`LLM API ขัดข้อง (${error.message}) กำลังลองใหม่ ${attempt + 1}/${maxAttempts} ใน ${delay}ms`);
