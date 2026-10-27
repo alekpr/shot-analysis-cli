@@ -349,6 +349,20 @@ export function validateReferencePrompts(value, existingReferenceLabels = [], st
     }
   }
 
+  if (Array.isArray(shotList?.shots)) {
+    const existingCovers = (requirements, matches) => [...requirements.keys()]
+      .filter((key) => returnedExisting.some((reference) => matches(reference, key))).length;
+    const expectedNewAssets = expectedSubjects.size
+      + expectedLocations.size
+      + expectedObjects.size
+      - existingCovers(expectedSubjects, (reference, subject) => reference.assetType === "character" && (reference.linkedSubjects || []).includes(subject))
+      - existingCovers(expectedLocations, (reference, key) => reference.assetType === "location" && normalizeComparison(reference.locationKey) === key)
+      - existingCovers(expectedObjects, (reference, key) => reference.assetType === "object" && normalizeComparison(reference.objectKey) === key);
+    if (value.assets.length !== expectedNewAssets) {
+      errors.push(`reference prompts ต้องสร้าง new prompts ${expectedNewAssets} รายการตาม ${expectedSubjects.size} subjects + ${expectedLocations.size} locations + ${expectedObjects.size} objects แต่ได้ ${value.assets.length}`);
+    }
+  }
+
   const checkCoverage = (kind, requirements, matches) => {
     for (const [key, requiredShots] of requirements) {
       const candidates = references.filter((reference) => matches(reference, key));

@@ -346,6 +346,7 @@ test("rejects incomplete reference coverage for subjects, locations, and objects
   };
   const story = { characters: [{ id: "Subject 1" }, { id: "Subject 2" }] };
   const errors = validateReferencePrompts(references, [], story, { shots: [shot1, shot2] }).join("; ");
+  assert.match(errors, /ต้องสร้าง new prompts 5 รายการ.*แต่ได้ 2/);
   assert.match(errors, /ไม่มี character สำหรับ Subject 2/);
   assert.match(errors, /ไม่มี location สำหรับ hallway/);
   assert.match(errors, /ไม่มี object สำหรับ sealed letter/);

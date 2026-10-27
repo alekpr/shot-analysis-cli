@@ -250,6 +250,8 @@ Storyboard prompt จะกำหนด grid จากจำนวน shot โ�
 
 `Existing images` นับเฉพาะรายการที่ผู้ใช้กรอกในคำถาม “ภาพอ้างอิงที่มีอยู่แล้ว” เท่านั้น การกด Enter หมายถึงไม่มีภาพเดิมและต้องแสดงค่า 0 ส่วน character/location/object ที่ระบบเห็นว่าจำเป็นจะอยู่ใน `New prompts to generate`; LLM ไม่มีสิทธิ์เพิ่ม existing image จากการวิเคราะห์ brief เอง
 
+จำนวน `New prompts to generate` ต้องเท่ากับ requirement ที่ยังไม่มีภาพเดิมรองรับ: หนึ่ง character sheet ต่อหนึ่ง Subject ที่มองเห็น + หนึ่ง environment reference ต่อหนึ่ง `locationKey` + หนึ่ง object reference ต่อหนึ่ง `objectKey` หากจำนวนไม่ตรง ระบบจะปฏิเสธผลลัพธ์และระบุจำนวนที่คาดหวังกับจำนวนที่ได้รับ
+
 ## ดูสถานะ
 
 ระบุโฟลเดอร์โปรเจกต์ที่มี `.shot-analysis/session.json`:
