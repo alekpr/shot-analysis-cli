@@ -83,7 +83,7 @@ export async function main(argv) {
         ? await runNewWorkflow({ terminal, llm, args, settings })
         : command === "resume"
           ? await runResumeWorkflow({ terminal, llm, folder: argv[1] || ".", settings })
-          : (() => {
+          : await (() => {
               const stages = new Set(["story", "shots", "references", "storyboard", "final"]);
               const stage = stages.has(argv[1]) ? argv[1] : "final";
               const folder = stages.has(argv[1]) ? argv[2] || "." : argv[1] || ".";

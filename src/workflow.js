@@ -240,9 +240,18 @@ async function generateFinalPromptArtifact({ llm, outputFolder, state, settings,
 }
 
 export function normalizeExistingReferences(analysis, references = "") {
-  const raw = analysis?.references?.length
-    ? analysis.references
-    : references.split(",").map((item) => item.trim()).filter(Boolean).map((label) => ({ label, description: "ภาพอ้างอิงที่ผู้ใช้ระบุ" }));
+  const requested = String(references || "").split(",").map((item) => item.trim()).filter(Boolean);
+  if (requested.length === 0) return [];
+  const analyzed = Array.isArray(analysis?.references) ? analysis.references : [];
+  const raw = requested.map((label, index) => {
+    const candidate = label.replace(/^<|>$/g, "");
+    const samePosition = analyzed[index];
+    const samePositionLabel = String(samePosition?.pictureId || samePosition?.label || "").trim().replace(/^<|>$/g, "");
+    const matching = samePositionLabel.toLocaleLowerCase() === candidate.toLocaleLowerCase()
+      ? samePosition
+      : analyzed.find((item) => String(item.pictureId || item.label || "").trim().replace(/^<|>$/g, "").toLocaleLowerCase() === candidate.toLocaleLowerCase());
+    return { label, description: matching?.description || label || "ภาพอ้างอิงที่ผู้ใช้ระบุ" };
+  });
   const prepared = raw.map((item) => {
     const candidate = String(item.pictureId || item.label || "").trim().replace(/^<|>$/g, "");
     const number = Number(candidate.match(/^Picture (\d+)$/i)?.[1]);
@@ -359,7 +368,7 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
   const requestedShotCount = parseShotCountPreference(await terminal.ask("จำนวน shots ที่ต้องการ (เว้นว่างเพื่อให้ LLM แนะนำ)", ""));
   const targetPlatform = await terminal.ask("แพลตฟอร์มเป้าหมาย", "Facebook Reels");
   const aspectRatio = await terminal.ask("อัตราส่วนภาพ", "9:16");
-  const references = await terminal.ask("รายการภาพอ้างอิง เช่น Picture 1, Picture 2 (เว้นว่างได้)", "");
+  const references = await terminal.ask("รายการภาพอ้างอิงที่มีอยู่แล้ว เช่น Picture 1, Picture 2 (เว้นว่าง = ไม่มีภาพเดิม)", "");
   const defaultFolder = `./${slugify(projectName)}`;
   const outputFolder = resolveOutputPath(args.output || await terminal.ask("โฟลเดอร์เก็บเอกสารโปรเจกต์", defaultFolder));
   const firstArtifact = path.join(outputFolder, "00-brief.md");

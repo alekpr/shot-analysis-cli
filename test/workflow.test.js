@@ -285,13 +285,20 @@ test("generateJson regenerates from the original prompt after repeated malformed
   assert.match(prompts[2], /สร้าง JSON สำหรับ story ใหม่ทั้งหมด/);
 });
 
-test("normalizes existing Picture IDs into a stable 1-N order without separating descriptions", () => {
+test("uses only user-declared existing references and keeps stable Picture IDs", () => {
+  assert.deepEqual(normalizeExistingReferences({
+    references: [
+      { label: "Picture 1", description: "LLM invented hero reference" },
+      { label: "Picture 2", description: "LLM invented location reference" }
+    ]
+  }, ""), []);
+
   const sorted = normalizeExistingReferences({
     references: [
       { label: "Picture 2", description: "Restaurant" },
       { label: "Picture 1", description: "Hero" }
     ]
-  });
+  }, "Picture 2, Picture 1");
   assert.deepEqual(sorted, [
     { pictureId: "Picture 1", description: "Hero" },
     { pictureId: "Picture 2", description: "Restaurant" }
@@ -302,7 +309,7 @@ test("normalizes existing Picture IDs into a stable 1-N order without separating
       { label: "Picture 4", description: "Hero" },
       { label: "Picture 4", description: "Restaurant" }
     ]
-  });
+  }, "Picture 4, Picture 4");
   assert.deepEqual(repaired, [
     { pictureId: "Picture 1", description: "Hero" },
     { pictureId: "Picture 2", description: "Restaurant" }
