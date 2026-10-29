@@ -238,7 +238,7 @@ Storyboard prompt จะกำหนด grid จากจำนวน shot โ�
 | `01-analysis.md` | ผลวิเคราะห์ จำนวน shot ที่ LLM แนะนำและผู้ใช้เลือก ข้อมูลภาพ mood และ Core |
 | `02-story.md` | โครงเรื่องที่ผ่านขั้น review |
 | `03-shots.md` | Production shot list พร้อม cinematic intent, attention path, visual payoff, beat, geography, visible state, timed action, causal link, กล้อง, เสียง, continuity bridge และ `referenceNeeds` ที่ระบุ location/object key ต่อ shot |
-| `04-reference-image-prompts.md` | Prompt สำหรับ Character, Location และ Object references พร้อมจำนวน prompt, Picture-to-asset mapping และ shots ที่ใช้ โดยแยกวัตถุแต่ละชนิดเป็นคนละ Picture |
+| `04-reference-image-prompts.md` | Prompt สำหรับตัวละครหลัก ตัวประกอบสำคัญ สถานที่ และ key props พร้อม Picture mapping รวมถึงคำอธิบาย text-only สำหรับตัวประกอบหรือวัตถุย่อยที่ไม่ต้องสร้างภาพ |
 | `04-storyboard-keyimage-prompt.md` | Master Prompt สำหรับสร้าง Storyboard contact sheet หนึ่งภาพ พร้อมหนึ่ง keyframe ต่อ shot, grid, panel map, reference mapping และ negative prompt |
 | `minimax-h3-05-generation-prompt.txt` | Generation prompt ฉบับรวมสำหรับ MiniMax H3 พร้อมรายละเอียดกล้อง geography ลำดับ action สีหน้า แสง เสียง บทพูด transition และ continuity |
 | `seedance-2.5-05-generation-prompt.txt` | Generation prompt ฉบับรวมสำหรับ Seedance 2.5 ในรูปแบบ Reference Mapping, timecoded beats และ global constraints |
@@ -246,11 +246,11 @@ Storyboard prompt จะกำหนด grid จากจำนวน shot โ�
 
 ระบบสร้างเฉพาะไฟล์ของโมเดลที่เลือกในรอบนั้น และเก็บไฟล์ของโมเดลอื่นไว้ จึงสามารถมีทั้งสองไฟล์ในโปรเจกต์เดียวกันได้ หาก generation prompt ไม่ผ่าน validation ระบบอาจเก็บคำตอบล่าสุดไว้ที่ `<target>-05-generation-prompt.failed.txt` เช่น `minimax-h3-05-generation-prompt.failed.txt` เพื่อช่วยตรวจสอบปัญหา
 
-ระบบตรวจ Image References จาก requirement ของแต่ละ shot: ตัวละครที่มองเห็นทุกตัวต้องมี character sheet, `locationKey` ทุกค่าและ `objectKey` ทุกค่าต้องมี asset รองรับ และ `usedInShots` ต้องครอบคลุมเฉพาะ shot ที่ใช้งานจริง Picture ID ถูกจัดเป็นลำดับต่อเนื่อง `Picture 1` ถึง `Picture N`; ภาพเดิมอยู่ก่อนและ prompt ใหม่เริ่มจากเลขถัดไป Validator ไม่ยอมให้ LLM สลับลำดับเลขกลับมา ใน final prompt ระบบตรวจต่อว่า `<Picture N>` หรือ `@ImageN` map กลับไปยัง asset เดิมและปรากฏในทุก shot/beat ที่ระบุไว้ จึงไม่ปล่อยให้ Picture ID ถูกสลับหน้าที่หรือมี prompt ภาพอ้างอิงไม่ครบโดยไม่แจ้ง error
+ระบบให้ LLM วิเคราะห์ Image Reference requirement ของแต่ละ shot ตัวละครหลัก ตัวประกอบที่ต้องรักษา identity/wardrobe สถานที่ทุก `locationKey` และ key prop ที่ขับเคลื่อนเรื่องหรือมี continuity สำคัญจะถูกสร้างเป็นภาพ ส่วนตัวประกอบเล็กน้อยและวัตถุทั่วไปใช้ `textOnlyRequirements` พร้อม description, reason และ `usedInShots` ระบบตรวจว่าทุก Subject/location/object ถูกครอบคลุมด้วย Picture หรือ text-only อย่างใดอย่างหนึ่ง ตัวละครหลักและสถานที่ห้ามเป็น text-only
 
 `Existing images` นับเฉพาะรายการที่ผู้ใช้กรอกในคำถาม “ภาพอ้างอิงที่มีอยู่แล้ว” เท่านั้น การกด Enter หมายถึงไม่มีภาพเดิมและต้องแสดงค่า 0 ส่วน character/location/object ที่ระบบเห็นว่าจำเป็นจะอยู่ใน `New prompts to generate`; LLM ไม่มีสิทธิ์เพิ่ม existing image จากการวิเคราะห์ brief เอง
 
-จำนวน `New prompts to generate` ต้องเท่ากับ requirement ที่ยังไม่มีภาพเดิมรองรับ: หนึ่ง character sheet ต่อหนึ่ง Subject ที่มองเห็น + หนึ่ง environment reference ต่อหนึ่ง `locationKey` + หนึ่ง object reference ต่อหนึ่ง `objectKey` หากจำนวนไม่ตรง ระบบจะปฏิเสธผลลัพธ์และระบุจำนวนที่คาดหวังกับจำนวนที่ได้รับ
+จำนวน `New prompts to generate` ต้องเท่ากับ requirement ที่ LLM เลือกเป็น image reference และยังไม่มีภาพเดิมรองรับ รายการ text-only จะไม่กิน Picture ID และคำอธิบายของมันจะถูกฝังลงใน storyboard และ final video prompt ของ shots ที่เกี่ยวข้องโดยอัตโนมัติ
 
 ## ดูสถานะ
 

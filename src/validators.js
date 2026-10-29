@@ -349,6 +349,57 @@ export function validateReferencePrompts(value, existingReferenceLabels = [], st
     }
   }
 
+  const textOnlyRequirements = Array.isArray(value.textOnlyRequirements) ? value.textOnlyRequirements : [];
+  const validTextOnlyKeys = new Set();
+  const primarySubjects = new Set((story?.characters || [])
+    .filter((character) => /(?:protagonist|main|lead|ตัวเอก|ตัวละครหลัก)/iu.test(`${character.role || ""} ${character.name || ""}`))
+    .map((character) => normalizeComparison(character.id))
+    .filter(Boolean));
+  if (primarySubjects.size === 0 && expectedSubjects.size) {
+    const firstStorySubject = (story?.characters || []).find((character) => expectedSubjects.has(character.id))?.id;
+    primarySubjects.add(normalizeComparison(firstStorySubject || expectedSubjects.keys().next().value));
+  }
+  const requirementFor = (assetType, key) => {
+    const requirements = assetType === "character" ? expectedSubjects : assetType === "object" ? expectedObjects : null;
+    if (!requirements) return null;
+    return [...requirements.entries()].find(([requirementKey]) => normalizeComparison(requirementKey) === normalizeComparison(key)) || null;
+  };
+  for (const item of textOnlyRequirements) {
+    const assetType = item?.assetType;
+    const key = String(item?.key || "").trim();
+    const token = `${assetType}:${normalizeComparison(key)}`;
+    if (!["character", "object"].includes(assetType)) {
+      errors.push(`text-only ${key || "requirement"} ต้องเป็น character หรือ object เท่านั้น`);
+      continue;
+    }
+    const requirement = requirementFor(assetType, key);
+    if (!requirement) {
+      errors.push(`text-only ${assetType} ${key || "ไม่ระบุ key"} ไม่มีใน SHOTS`);
+      continue;
+    }
+    if (validTextOnlyKeys.has(token)) {
+      errors.push(`text-only ${assetType} ${key} ซ้ำกัน`);
+      continue;
+    }
+    validTextOnlyKeys.add(token);
+    if (!String(item.description || "").trim()) errors.push(`text-only ${assetType} ${key} ไม่มี description`);
+    if (!String(item.reason || "").trim()) errors.push(`text-only ${assetType} ${key} ไม่มี reason`);
+    if (!Array.isArray(item.usedInShots)) errors.push(`text-only ${assetType} ${key} ไม่มี usedInShots`);
+    const requiredShots = requirement[1];
+    const covered = new Set((item.usedInShots || []).map(Number));
+    const missingShots = [...requiredShots].filter((shotNumber) => !covered.has(shotNumber));
+    const unrelatedShots = [...covered].filter((shotNumber) => !requiredShots.has(shotNumber));
+    if (missingShots.length) errors.push(`text-only ${assetType} ${key} ไม่มี usedInShots ${missingShots.join(", ")}`);
+    if (unrelatedShots.length) errors.push(`text-only ${assetType} ${key} ใส่ usedInShots ที่ไม่เกี่ยวข้อง: ${unrelatedShots.join(", ")}`);
+    if (assetType === "character" && primarySubjects.has(normalizeComparison(key))) {
+      errors.push(`ตัวละครหลัก ${key} ต้องสร้างเป็น image reference ห้ามใช้ text-only`);
+    }
+    const hasImageAsset = references.some((reference) => assetType === "character"
+      ? reference.assetType === "character" && (reference.linkedSubjects || []).some((subject) => normalizeComparison(subject) === normalizeComparison(key))
+      : reference.assetType === "object" && normalizeComparison(reference.objectKey) === normalizeComparison(key));
+    if (hasImageAsset) errors.push(`${assetType} ${key} ถูกกำหนดทั้ง image reference และ text-only`);
+  }
+
   if (Array.isArray(shotList?.shots)) {
     const existingCovers = (requirements, matches) => [...requirements.keys()]
       .filter((key) => returnedExisting.some((reference) => matches(reference, key))).length;
@@ -357,14 +408,16 @@ export function validateReferencePrompts(value, existingReferenceLabels = [], st
       + expectedObjects.size
       - existingCovers(expectedSubjects, (reference, subject) => reference.assetType === "character" && (reference.linkedSubjects || []).includes(subject))
       - existingCovers(expectedLocations, (reference, key) => reference.assetType === "location" && normalizeComparison(reference.locationKey) === key)
-      - existingCovers(expectedObjects, (reference, key) => reference.assetType === "object" && normalizeComparison(reference.objectKey) === key);
+      - existingCovers(expectedObjects, (reference, key) => reference.assetType === "object" && normalizeComparison(reference.objectKey) === key)
+      - validTextOnlyKeys.size;
     if (value.assets.length !== expectedNewAssets) {
-      errors.push(`reference prompts ต้องสร้าง new prompts ${expectedNewAssets} รายการตาม ${expectedSubjects.size} subjects + ${expectedLocations.size} locations + ${expectedObjects.size} objects แต่ได้ ${value.assets.length}`);
+      errors.push(`reference prompts ต้องสร้าง new prompts ${expectedNewAssets} รายการหลังหัก existing references และ text-only จาก ${expectedSubjects.size} subjects + ${expectedLocations.size} locations + ${expectedObjects.size} objects แต่ได้ ${value.assets.length}`);
     }
   }
 
   const checkCoverage = (kind, requirements, matches) => {
     for (const [key, requiredShots] of requirements) {
+      if (validTextOnlyKeys.has(`${kind}:${normalizeComparison(key)}`)) continue;
       const candidates = references.filter((reference) => matches(reference, key));
       if (candidates.length === 0) {
         errors.push(`reference prompts ไม่มี ${kind} สำหรับ ${key}`);
@@ -403,7 +456,13 @@ function requiredReferenceAssetsForShot(referenceAssets, shotNumber) {
   );
 }
 
-export function normalizeStoryboardPrompt(value, shotList) {
+function textOnlyRequirementsForShot(referenceAssets, shotNumber) {
+  return (referenceAssets?.textOnlyRequirements || []).filter((item) =>
+    (item.usedInShots || []).map(Number).includes(Number(shotNumber))
+  );
+}
+
+export function normalizeStoryboardPrompt(value, shotList, referenceAssets) {
   if (!value || typeof value !== "object") return value;
   const shots = shotList?.shots || [];
   if (!Array.isArray(value.panels)) return { ...value, shotCount: shots.length };
@@ -413,11 +472,19 @@ export function normalizeStoryboardPrompt(value, shotList) {
     panels: value.panels.map((panel, index) => {
       const shot = shots[index];
       if (!shot || !panel || typeof panel !== "object") return panel;
+      const textOnlyRequirements = textOnlyRequirementsForShot(referenceAssets, shot.number);
+      const textOnlyInstruction = textOnlyRequirements.length
+        ? `Text-only visual definitions (do not request extra reference images): ${textOnlyRequirements.map((item) => `${item.assetType} ${item.key}: ${item.description}`).join("; ")}`
+        : "";
+      const prompt = String(panel.prompt || "").trim();
       return {
         ...panel,
         shotNumber: Number(shot.number) || index + 1,
         timeRange: `${secondsToTime(shot.startTime)}-${secondsToTime(shot.endTime)}`,
-        camera: normalizeCameraPlan(shot.camera, shot.cameraContinuity)
+        camera: normalizeCameraPlan(shot.camera, shot.cameraContinuity),
+        prompt: textOnlyInstruction && !prompt.includes(textOnlyInstruction)
+          ? `${prompt} ${textOnlyInstruction}`.trim()
+          : prompt
       };
     })
   };
@@ -469,6 +536,11 @@ export function validateStoryboardPrompt(value, shotList, referenceAssets, expec
     for (const reference of requiredReferenceAssetsForShot(referenceAssets, panel.shotNumber)) {
       if (!(panel.referencePictures || []).includes(reference.pictureId)) {
         errors.push(`${label} ไม่มี ${reference.pictureId} ที่กำหนด usedInShots ไว้`);
+      }
+    }
+    for (const requirement of textOnlyRequirementsForShot(referenceAssets, panel.shotNumber)) {
+      if (!String(panel.prompt || "").includes(String(requirement.description || "").trim())) {
+        errors.push(`${label} prompt ไม่มีคำอธิบาย text-only ของ ${requirement.key}`);
       }
     }
   });

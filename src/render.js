@@ -22,7 +22,10 @@ export function renderReferencePrompts(value) {
   const existing = value.existingReferences?.length
     ? value.existingReferences.map((item) => `- ${item.pictureId}: ${item.description} | type=${item.assetType || "other"} | subjects=${(item.linkedSubjects || []).join(",") || "-"} | location=${item.locationKey || "-"} | object=${item.objectKey || "-"} | shots=${(item.usedInShots || []).join(",") || "-"}`).join("\n")
     : "- ไม่มีภาพอ้างอิงเดิม";
-  return `# Reference image prompts: ${value.projectTitle}\n\n- Existing images: ${(value.existingReferences || []).length}\n- New prompts to generate: ${(value.assets || []).length}\n- Total Picture mappings: ${allReferences.length}\n\n## Global style lock\n\n- Visual direction: ${value.globalStyle?.visualDirection}\n- Mood: ${value.globalStyle?.mood || "ไม่ได้ระบุเพิ่มเติม"}\n- Style lock: ${value.globalStyle?.styleLock}\n\n## Picture-to-asset mapping\n\n${mapping}\n\n## Existing references\n\n${existing}\n\n${assets}\n## วิธีใช้งาน\n\n${list(value.usageGuide)}\n`;
+  const textOnly = value.textOnlyRequirements?.length
+    ? value.textOnlyRequirements.map((item) => `- ${item.assetType} ${item.key}; shots=${(item.usedInShots || []).join(", ") || "-"}; ${item.description} — เหตุผล: ${item.reason}`).join("\n")
+    : "- ไม่มีรายการ text-only";
+  return `# Reference image prompts: ${value.projectTitle}\n\n- Existing images: ${(value.existingReferences || []).length}\n- New prompts to generate: ${(value.assets || []).length}\n- Total Picture mappings: ${allReferences.length}\n\n## Global style lock\n\n- Visual direction: ${value.globalStyle?.visualDirection}\n- Mood: ${value.globalStyle?.mood || "ไม่ได้ระบุเพิ่มเติม"}\n- Style lock: ${value.globalStyle?.styleLock}\n\n## Picture-to-asset mapping\n\n${mapping}\n\n## Existing references\n\n${existing}\n\n## Text-only visual requirements\n\n${textOnly}\n\n${assets}\n## วิธีใช้งาน\n\n${list(value.usageGuide)}\n`;
 }
 
 export function renderStoryboardPrompt(value) {

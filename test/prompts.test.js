@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { finalPrompt, SHOT_LIST_FRAMEWORK, shotsPrompt, storyboardPrompt, SYSTEM_PROMPT } from "../src/prompts.js";
+import { finalPrompt, referencePromptsPrompt, SHOT_LIST_FRAMEWORK, shotsPrompt, storyboardPrompt, SYSTEM_PROMPT } from "../src/prompts.js";
 
 test("shot prompt requires production-level action, camera, sound, and continuity detail", () => {
   const prompt = shotsPrompt({ title: "Test", durationSeconds: 30 });
@@ -57,6 +57,14 @@ test("Seedance target uses reference mapping and timecoded beats", () => {
   assert.match(prompt, /TIMECODED_BEATS:/);
   assert.match(prompt, /GLOBAL_CONSTRAINTS:/);
   assert.doesNotMatch(prompt, /บรรทัดแรกต้องเริ่มด้วย DY,subject_definitions/);
+});
+
+test("reference prompt lets the LLM select minor props as text-only", () => {
+  const prompt = referencePromptsPrompt({}, { shots: [] }, []);
+  assert.match(prompt, /textOnlyRequirements/);
+  assert.match(prompt, /key prop/);
+  assert.match(prompt, /วัตถุย่อยทั่วไป/);
+  assert.match(prompt, /ตัวละครหลักและ location ห้ามเป็น text-only/);
 });
 
 test("storyboard prompt requests one still panel per shot in one contact sheet", () => {

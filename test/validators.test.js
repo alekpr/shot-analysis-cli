@@ -293,6 +293,27 @@ test("normalizes storyboard facts from the approved shot list", () => {
   assert.equal(normalized.panels[0].keyframeMoment, "Keep this creative keyframe");
 });
 
+test("injects text-only visual definitions into the matching storyboard panels", () => {
+  const shots = { shots: [validShot(1, 0, 5)] };
+  const references = {
+    textOnlyRequirements: [{
+      assetType: "object",
+      key: "paper-cup",
+      description: "A plain disposable white paper cup with a slightly crushed rim.",
+      usedInShots: [1]
+    }]
+  };
+  const value = {
+    panels: [{ shotNumber: 1, prompt: "A cinematic still frame." }]
+  };
+  const normalized = normalizeStoryboardPrompt(value, shots, references);
+  assert.match(normalized.panels[0].prompt, /paper-cup/);
+  assert.match(normalized.panels[0].prompt, /slightly crushed rim/);
+  assert.equal(normalized.panels[0].prompt.match(/Text-only visual definitions/g)?.length, 1);
+  const normalizedAgain = normalizeStoryboardPrompt(normalized, shots, references);
+  assert.equal(normalizedAgain.panels[0].prompt.match(/Text-only visual definitions/g)?.length, 1);
+});
+
 test("validates character and location reference prompts with unique picture IDs", () => {
   const value = {
     globalStyle: { visualDirection: "Anime" },
@@ -350,6 +371,38 @@ test("rejects incomplete reference coverage for subjects, locations, and objects
   assert.match(errors, /ไม่มี character สำหรับ Subject 2/);
   assert.match(errors, /ไม่มี location สำหรับ hallway/);
   assert.match(errors, /ไม่มี object สำหรับ sealed letter/);
+});
+
+test("allows minor objects as text-only while keeping main characters and locations as images", () => {
+  const shot = validShot(1, 0, 5);
+  shot.referenceNeeds = { locationKey: "room", objectKeys: ["paper-cup"] };
+  const story = { characters: [{ id: "Subject 1", name: "Hero", role: "Protagonist" }] };
+  const references = {
+    globalStyle: { visualDirection: "Live action" },
+    existingReferences: [],
+    textOnlyRequirements: [{
+      assetType: "object",
+      key: "paper-cup",
+      description: "A plain disposable white paper cup with a slightly crushed rim.",
+      reason: "Minor single-use background prop with no identity continuity.",
+      usedInShots: [1]
+    }],
+    assets: [
+      { pictureId: "Picture 1", assetType: "character", name: "Hero", linkedSubjects: ["Subject 1"], usedInShots: [1], prompt: "Hero sheet", negativePrompt: "text" },
+      { pictureId: "Picture 2", assetType: "location", name: "Room", locationKey: "room", linkedSubjects: [], usedInShots: [1], prompt: "Room", negativePrompt: "people" }
+    ]
+  };
+  assert.deepEqual(validateReferencePrompts(references, [], story, { shots: [shot] }), []);
+
+  references.textOnlyRequirements.push({
+    assetType: "character",
+    key: "Subject 1",
+    description: "The main hero.",
+    reason: "Attempt to omit the protagonist reference.",
+    usedInShots: [1]
+  });
+  references.assets = references.assets.filter((asset) => asset.assetType !== "character");
+  assert.match(validateReferencePrompts(references, [], story, { shots: [shot] }).join("; "), /ตัวละครหลัก Subject 1 ต้องสร้างเป็น image reference/);
 });
 
 test("final prompt requires each Picture mapping and its per-shot reference", () => {

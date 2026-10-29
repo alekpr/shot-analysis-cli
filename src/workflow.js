@@ -509,7 +509,7 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
     storyboardPrompt(story, shots, referencePrompts, aspectRatio),
     (value) => validateStoryboardPrompt(value, shots, referencePrompts, aspectRatio),
     "storyboard key image prompt",
-    { normalize: (value) => normalizeStoryboardPrompt(value, shots) }
+    { normalize: (value) => normalizeStoryboardPrompt(value, shots, referencePrompts) }
   ));
   const storyboardFile = path.join(outputFolder, "04-storyboard-keyimage-prompt.md");
   await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
@@ -521,7 +521,7 @@ export async function runNewWorkflow({ terminal, llm, args, settings }) {
       storyboardPrompt(story, shots, referencePrompts, aspectRatio, notes),
       (value) => validateStoryboardPrompt(value, shots, referencePrompts, aspectRatio),
       "storyboard key image prompt",
-      { normalize: (value) => normalizeStoryboardPrompt(value, shots) }
+      { normalize: (value) => normalizeStoryboardPrompt(value, shots, referencePrompts) }
     ));
     await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
     state.storyboardPrompt = storyboard;
@@ -735,7 +735,7 @@ async function runResumeWorkflowUnlocked({ terminal, llm, folder = ".", settings
           storyboardPrompt(state.story, state.shots, state.referencePrompts, input.aspectRatio),
           (value) => validateStoryboardPrompt(value, state.shots, state.referencePrompts, input.aspectRatio),
           "storyboard key image prompt",
-          { normalize: (value) => normalizeStoryboardPrompt(value, state.shots) }
+          { normalize: (value) => normalizeStoryboardPrompt(value, state.shots, state.referencePrompts) }
         );
         state.storyboardPrompt = storyboard;
         await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
@@ -747,7 +747,7 @@ async function runResumeWorkflowUnlocked({ terminal, llm, folder = ".", settings
           storyboardPrompt(state.story, state.shots, state.referencePrompts, input.aspectRatio, notes),
           (value) => validateStoryboardPrompt(value, state.shots, state.referencePrompts, input.aspectRatio),
           "storyboard key image prompt",
-          { normalize: (value) => normalizeStoryboardPrompt(value, state.shots) }
+          { normalize: (value) => normalizeStoryboardPrompt(value, state.shots, state.referencePrompts) }
         );
         state.storyboardPrompt = storyboard;
         await saveText(storyboardFile, renderStoryboardPrompt(storyboard));
